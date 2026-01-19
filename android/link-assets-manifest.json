@@ -1,0 +1,173 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/FiraCode-VariableFont_wght.ttf",
+      "sha1": "bc344ffa55c8f4ab47b8a127bf34c7b1a3338241"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/OFL.txt",
+      "sha1": "69d3abffd3fbb46ec6906dd9dced068d07d9f14b"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/README.txt",
+      "sha1": "230fb447f1c09bdce6798d164e782cdf50ee0614"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/static/FiraCode-Bold.ttf",
+      "sha1": "c69ffea0fc3ef8cba6c72e31ff9db8a36dc9c857"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/static/FiraCode-Light.ttf",
+      "sha1": "4ebade19d676d4fd2ba4a5bea84b7f5f1fb7613f"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/static/FiraCode-Medium.ttf",
+      "sha1": "0550c09902c501ff13cce519af884ee557b094e7"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/static/FiraCode-Regular.ttf",
+      "sha1": "80abed4c40b3a19ba2def87e7fd66fba9bb40c2f"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Fira_Code/static/FiraCode-SemiBold.ttf",
+      "sha1": "111660e71589fb6d2e9d63d9d558a7ed9ffc999e"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/OFL.txt",
+      "sha1": "71a756083284915f23ffc4359868cf48a85e9adb"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/RadioCanada-Italic-VariableFont_wdth,wght.ttf",
+      "sha1": "362cfbac5f9825343bc6564a7ca06d1b82476f90"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/RadioCanada-VariableFont_wdth,wght.ttf",
+      "sha1": "cf324faa5a4d5859331d9cbff4028667044903cf"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/README.txt",
+      "sha1": "9b6c4a04c5f4b4c1a697229f76625a6a16bde7ad"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-Bold.ttf",
+      "sha1": "354843cfe3340b390c0837dfccb95594de65c34e"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-BoldItalic.ttf",
+      "sha1": "7e9f00d95beb94d9c9a3416022c6c1a4944965a5"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-Italic.ttf",
+      "sha1": "1a510656e3f07e341081c09572bf9b7b6b9e57fc"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-Light.ttf",
+      "sha1": "726a9333b4f1127d8aee86989d2234583dcb1894"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-LightItalic.ttf",
+      "sha1": "aa79faec3b082cd4b0ee00f925a865bf056c57ce"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-Medium.ttf",
+      "sha1": "a84a9a5010dfa0f0976e2c40592a221ef6af7c22"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-MediumItalic.ttf",
+      "sha1": "35a315cb0339ab0439e89d1b1cde1e3690e1fa6c"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-Regular.ttf",
+      "sha1": "ca50bd2d33eaaa2f0b3e1bae6cb638df0c392df7"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-SemiBold.ttf",
+      "sha1": "377be68a9d4782ef097d0729574b233243eb54aa"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada-SemiBoldItalic.ttf",
+      "sha1": "f3c1f3a7fa8f624a5bb074902cf043f722478f84"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-Bold.ttf",
+      "sha1": "f7d021a56fbdb58468e3c3c05123bcb1da8200c8"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-BoldItalic.ttf",
+      "sha1": "c67f7cd76ed5d4541e54f1ad85ea7fff1a73afc6"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-Italic.ttf",
+      "sha1": "3215fff8703b55448367d594db8fb0e1ed9af460"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-Light.ttf",
+      "sha1": "a77d7fa9f58931181a61291432220dad6ac79f02"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-LightItalic.ttf",
+      "sha1": "71edd839e0fc4fcf09899727804feb0049ba6991"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-Medium.ttf",
+      "sha1": "02c20f14297d44b82ed826fccae90c1334dc0bd8"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-MediumItalic.ttf",
+      "sha1": "0b9c6a29f3c01746670392d33073ee1daceabeb5"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-Regular.ttf",
+      "sha1": "1cd6882ba4e61142994f03c89af61a2c093877d0"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-SemiBold.ttf",
+      "sha1": "47197895be3fe52191ddaabf23fccb4ba716472d"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_Condensed-SemiBoldItalic.ttf",
+      "sha1": "9aeeda1db0940a1a42fae4c47d76f8540dba6718"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-Bold.ttf",
+      "sha1": "466826c0556151cc9c5c01339844b3893d0a2c4f"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-BoldItalic.ttf",
+      "sha1": "63e671590c3539d026a353a2efd226a2c23653f9"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-Italic.ttf",
+      "sha1": "5f8b81ba3238254596c3a485f494bafeff7a171e"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-Light.ttf",
+      "sha1": "431c55f376110c4885fd65eb4745842d93a499a6"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-LightItalic.ttf",
+      "sha1": "e168f40ebac96cf64c04aa21c751520f32309f24"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-Medium.ttf",
+      "sha1": "f2d4d865304d8998de0661201c4ec2eff3ade9c2"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-MediumItalic.ttf",
+      "sha1": "f29a0f3b9b33cfb760266dd207c1a8a4ae78a4ff"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-Regular.ttf",
+      "sha1": "4b084457111a38984e493843622477df6655905e"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-SemiBold.ttf",
+      "sha1": "a1e1b6cee807d3c150d8dd742591b774070a2cd8"
+    },
+    {
+      "path": "src/assets/fonts/Fira_Code,Radio_Canada/Radio_Canada/static/RadioCanada_SemiCondensed-SemiBoldItalic.ttf",
+      "sha1": "1c571fc65be65ba976bf067bd6a3600199474904"
+    }
+  ]
+}
