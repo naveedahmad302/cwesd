@@ -1,28 +1,67 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import LoginScreen from '../screens/LoginScreen';
-import DrawerNavigator from './DrawerNavigator';
+import { useAuth } from '../contexts/AuthContext';
+import StudentNavigator from './StudentNavigator';
+import TeacherNavigator from './TeacherNavigator';
 
 export type RootStackParamList = {
   Login: undefined;
-  Home: undefined; // This will now render the DrawerNavigator
+  Student: undefined;
+  Teacher: undefined;
 };
 
 export type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
-export type HomeScreenProps = NativeStackScreenProps<RootStackParamList, 'Home'>;
+
+export type AuthStackParamList = {
+  Login: undefined;
+};
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+
+const AuthStackScreen = () => (
+  <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+    <AuthStack.Screen name="Login" component={LoginScreen} />
+  </AuthStack.Navigator>
+);
 
 const AppNavigator = () => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Home" component={DrawerNavigator} options={{ headerShown: false }} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {user ? (
+          user.role === 'teacher' ? (
+            <Stack.Screen name="Teacher" component={TeacherNavigator} />
+          ) : (
+            <Stack.Screen name="Student" component={StudentNavigator} />
+          )
+        ) : (
+          <Stack.Screen name="Login" component={AuthStackScreen} />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
 
 export default AppNavigator;

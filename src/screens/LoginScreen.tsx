@@ -1,20 +1,32 @@
 import React, { useState } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import StyledText from '../components/StyledText';
-import { LoginScreenProps } from '../navigation/AppNavigator';
+import { useAuth } from '../contexts/AuthContext';
 import { typography } from '../theme/typography';
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
+const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
 
-  const handleLogin = () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password.');
-      return;
-    }
-    navigation.navigate('Home');
-  };
+ const handleLogin = async () => {
+  if (!email || !password) {
+    Alert.alert('Error', 'Please enter both email and password.');
+    return;
+  }
+
+  try {
+    setIsLoading(true);
+    await login(email, password);
+    // Navigation is handled by the AuthContext and AppNavigator
+  } catch (error) {
+    console.error('Login error:', error);
+    Alert.alert('Login Failed', 'Invalid email or password. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <KeyboardAvoidingView
@@ -46,8 +58,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           onChangeText={setPassword}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <StyledText style={styles.buttonText}>Login</StyledText>
+        <TouchableOpacity 
+          style={[styles.button, isLoading && styles.buttonDisabled]} 
+          onPress={handleLogin}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <StyledText style={styles.buttonText}>Login</StyledText>
+          )}
         </TouchableOpacity>
 
         <View style={styles.footer}>
@@ -62,6 +82,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
