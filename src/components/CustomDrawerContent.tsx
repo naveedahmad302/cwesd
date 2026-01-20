@@ -7,11 +7,22 @@ import { DrawerContentComponentProps } from '@react-navigation/drawer';
 
 const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
   const { state, ...rest } = props;
-  const newState = { ...state };
-  // Manually filter out the screens that are not part of the main list
-  newState.routes = newState.routes.filter(item => 
-    !['Analytics', 'Profile', 'Settings'].includes(item.name)
+  
+  // Create a new state with filtered routes
+  const mainRoutes = state.routes.filter(
+    (route) => !['Analytics', 'Profile', 'Settings'].includes(route.name)
   );
+  
+  const newState = {
+    ...state,
+    routes: mainRoutes,
+    index: mainRoutes.findIndex(route => route.key === state.routes[state.index].key)
+  };
+  
+  // Ensure we have a valid index
+  if (newState.index === -1) {
+    newState.index = 0;
+  }
 
   return (
     <DrawerContentScrollView {...props}>
@@ -30,7 +41,7 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItem 
           label="Analytics" 
           onPress={() => props.navigation.navigate('Analytics')} 
-          icon={({ color, size }) => <Icon name="chart-line" color={color} size={size} />} 
+          icon={({ size }) => <View style={styles.iconContainer}><Icon name="chart-line" color="#000000" size={size} /></View>} 
           labelStyle={styles.drawerLabel}
         />
       </View>
@@ -40,13 +51,13 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItem 
           label="Profile" 
           onPress={() => props.navigation.navigate('Profile')} 
-          icon={({ color, size }) => <Icon name="account-circle-outline" color={color} size={size} />} 
+          icon={({ size }) => <View style={styles.iconContainer}><Icon name="account-circle-outline" color="#000000" size={size} /></View>} 
           labelStyle={styles.drawerLabel}
         />
         <DrawerItem 
           label="Settings" 
           onPress={() => props.navigation.navigate('Settings')} 
-          icon={({ color, size }) => <Icon name="cog-outline" color={color} size={size} />} 
+          icon={({ size }) => <View style={styles.iconContainer}><Icon name="cog-outline" color="#000000" size={size} /></View>} 
           labelStyle={styles.drawerLabel}
         />
       </View>
@@ -59,29 +70,36 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    paddingHorizontal: 10,
   },
   headerTitle: {
-  drawerLabel: {
-    marginLeft: -20,
-    fontFamily: 'FiraCode-Regular',
-    fontSize: 14,
-  },
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1E1E1E',
+    
+  },
+  iconContainer: {
+    marginLeft: 0,
+  },
+  drawerLabel: {
+    // marginLeft: 20,
+    color: '#000000',
+    fontFamily: 'FiraCode-Regular',
+    fontSize: 14,
   },
   headerSubtitle: {
     fontSize: 14,
     color: '#888888',
   },
   sectionContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop:20,
+    // paddingHorizontal: 10,
   },
   sectionTitle: {
     fontSize: 14,
     color: '#888888',
-    marginBottom: 10,
+    marginBottom: 8,
+    paddingHorizontal: 10,
   },
 });
 

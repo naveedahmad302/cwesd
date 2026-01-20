@@ -1,5 +1,6 @@
 import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
+import { View, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Screens
@@ -20,43 +21,55 @@ const Drawer = createDrawerNavigator();
 const DrawerNavigator = () => {
   return (
     <Drawer.Navigator
-      initialRouteName="Chat with Teacher" // Set initial route to the highlighted one
+      initialRouteName="Dashboard" // Set initial route to Dashboard
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
-        drawerActiveBackgroundColor: 'transparent',
+        drawerActiveBackgroundColor: '#00FFCC',
         drawerInactiveBackgroundColor: 'transparent',
-        drawerActiveTintColor: '#1E1E1E',
+        drawerActiveTintColor: '#0C0C1D',
         drawerInactiveTintColor: '#1E1E1E',
-        drawerLabelStyle: { marginLeft: -20, fontFamily: 'FiraCode-Regular' },
+        drawerLabelStyle: { 
+          marginLeft: -2, 
+          fontFamily: 'FiraCode-Regular',
+          paddingVertical: 0, 
+          marginVertical: 0,  
+          lineHeight: 10,     
+        },
+        drawerItemStyle: {
+          borderRadius: 8, 
+          marginHorizontal: 0,
+          marginVertical: 0,
+          paddingHorizontal:10,
+        },
       }}
     >
       <Drawer.Screen 
         name="Dashboard" 
         component={DashboardScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="home-outline" color={color} size={size} /> }}
+        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="home-outline" color={color} size={size} /></View> }}
       />
       <Drawer.Screen 
         name="My Modules" 
         component={MyModulesScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="book-open-page-variant-outline" color={color} size={size} /> }}
+        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="book-open-page-variant-outline" color={color} size={size} /></View> }}
       />
       <Drawer.Screen 
         name="Calendar" 
         component={CalendarScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="calendar-blank-outline" color={color} size={size} /> }}
+        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="calendar-blank-outline" color={color} size={size} /></View> }}
       />
       <Drawer.Screen 
         name="Chat with Teacher" 
         component={ChatWithTeacherScreen} 
         options={{
-          drawerIcon: ({ color, size }) => <Icon name="chat-outline" color={color} size={size} />,
-          drawerItemStyle: { backgroundColor: '#00FFC2' } // Highlight color
+          drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="chat-outline" color={color} size={size} /></View>,
+          // drawerItemStyle: { backgroundColor: '#00FFC2' } // Highlight color
         }}
       />
       <Drawer.Screen 
         name="Certificates" 
         component={CertificatesScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="certificate-outline" color={color} size={size} /> }}
+        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="certificate-outline" color={color} size={size} /></View> }}
       />
       <Drawer.Screen 
         name="Analytics" 
@@ -76,6 +89,12 @@ const DrawerNavigator = () => {
     </Drawer.Navigator>
   );
 };
+
+const styles = StyleSheet.create({
+  iconContainer: {
+    marginLeft: -16,
+  },
+});
 
 export default DrawerNavigator;
 
