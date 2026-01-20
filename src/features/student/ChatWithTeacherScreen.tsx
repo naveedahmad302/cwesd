@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem } from 'react-native';
-import StyledText from '../components/StyledText';
+import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Type definitions
@@ -27,7 +27,7 @@ const TEACHERS = [
   { id: '4', name: 'Prof. David Kim', subject: 'Biology', avatar: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmUafSaFgZl4haVLyw9ocWSnlyCcYCH8avngcEE8xcJw&s', online: true },
 ];
 
-const MESSAGES = [
+const MESSAGES: Message[] = [
   { id: '1', text: 'Hello, how can I help you today?', sender: 'teacher', time: '10:30 AM' },
   { id: '2', text: 'I need help with the calculus assignment', sender: 'me', time: '10:32 AM' },
   { id: '3', text: 'Which part are you having trouble with?', sender: 'teacher', time: '10:33 AM' },
@@ -41,7 +41,7 @@ const ChatWithTeacherScreen = () => {
   const handleSend = () => {
     if (message.trim() === '') return;
     
-    const newMessage = {
+    const newMessage: Message = {
       id: Date.now().toString(),
       text: message,
       sender: 'me',

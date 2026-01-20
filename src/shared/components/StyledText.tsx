@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, StyleSheet, TextProps } from 'react-native';
-import { typography } from '../theme/typography';
+import { typography } from '../../theme/typography';
 
 interface StyledTextProps extends TextProps {
   children: React.ReactNode;

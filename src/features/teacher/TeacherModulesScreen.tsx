@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../auth';
 
 const TeacherModulesScreen = () => {
   const { user } = useAuth();

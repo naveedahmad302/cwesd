@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import StyledText from '../components/StyledText';
-import { HomeScreenProps } from '../navigation/AppNavigator';
+import StyledText from '../shared/components/StyledText';
+import { LoginScreenProps } from '../shared/navigation/AppNavigator';
 
-const HomeScreen: React.FC<HomeScreenProps> = () => {
+const HomeScreen: React.FC<LoginScreenProps> = () => {
   return (
     <View style={styles.container}>
       <StyledText style={styles.text}>Welcome to My App!</StyledText>

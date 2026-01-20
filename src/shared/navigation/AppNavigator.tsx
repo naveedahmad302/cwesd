@@ -2,8 +2,8 @@ import React, { useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import LoginScreen from '../screens/LoginScreen';
-import { useAuth } from '../contexts/AuthContext';
+import { LoginScreen } from '../../features/auth';
+import { useAuth } from '../../features/auth';
 import StudentNavigator from './StudentNavigator';
 import TeacherNavigator from './TeacherNavigator';
 

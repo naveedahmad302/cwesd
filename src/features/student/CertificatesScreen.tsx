@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import StyledText from '../components/StyledText';
+import StyledText from '../../shared/components/StyledText';
 
 const CertificatesScreen = () => {
   return (

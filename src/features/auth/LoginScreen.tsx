@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
-import StyledText from '../components/StyledText';
-import { useAuth } from '../contexts/AuthContext';
-import { typography } from '../theme/typography';
+import { StyledText } from '../../shared/components';
+import { useAuth } from './AuthContext';
+import { typography } from '../../theme/typography';
+import { showSuccessToast, showErrorToast, showInfoToast } from '../../utils/toast';
+
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -19,10 +21,15 @@ const LoginScreen = () => {
   try {
     setIsLoading(true);
     await login(email, password);
+    
+        showSuccessToast(`Welcome back,`, 'Login Successful');
+
+
     // Navigation is handled by the AuthContext and AppNavigator
   } catch (error) {
     console.error('Login error:', error);
-    Alert.alert('Login Failed', 'Invalid email or password. Please try again.');
+        showErrorToast('Incorrect credentials. Please try again.', 'Login Failed');
+;
   } finally {
     setIsLoading(false);
   }

@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import StyledText from '../components/StyledText';
+import StyledText from '../../shared/components/StyledText';
 
-const CalendarScreen = () => {
+const AnalyticsScreen = () => {
   return (
     <View style={styles.container}>
-      <StyledText style={styles.text}>Calendar Screen</StyledText>
+      <StyledText style={styles.text}>Analytics Screen</StyledText>
     </View>
   );
 };
@@ -24,4 +24,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CalendarScreen;
+export default AnalyticsScreen;

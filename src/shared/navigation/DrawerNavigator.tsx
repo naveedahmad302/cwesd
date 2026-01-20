@@ -3,18 +3,18 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { View, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-// Screens
-import DashboardScreen from '../screens/DashboardScreen';
-import MyModulesScreen from '../screens/MyModulesScreen';
-import CalendarScreen from '../screens/CalendarScreen';
-import ChatWithTeacherScreen from '../screens/ChatWithTeacherScreen';
-import CertificatesScreen from '../screens/CertificatesScreen';
-import AnalyticsScreen from '../screens/AnalyticsScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+// Student Screens
+import { DashboardScreen } from '../../features/student';
+import { MyModulesScreen } from '../../features/student';
+import { CalendarScreen } from '../../features/student';
+import { ChatWithTeacherScreen } from '../../features/student';
+import { CertificatesScreen } from '../../features/student';
+import { AnalyticsScreen } from '../../features/student';
+import { ProfileScreen } from '../../features/student';
+import { SettingsScreen } from '../../features/common';
 
 // Custom Drawer
-import CustomDrawerContent from '../components/CustomDrawerContent';
+import { CustomDrawerContent } from '../components';
 
 const Drawer = createDrawerNavigator();
 

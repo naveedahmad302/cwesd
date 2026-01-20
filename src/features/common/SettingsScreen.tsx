@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import StyledText from '../components/StyledText';
+import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../auth';
 import { useNavigation } from '@react-navigation/native';
 import { CommonActions } from '@react-navigation/native';
 
