@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { userAPI } from '../../services/api';
+import axios from 'axios';
 
 // Type definitions
 interface Teacher {
@@ -12,6 +14,17 @@ interface Teacher {
   online: boolean;
 }
 
+// API response type
+interface TeacherApiResponse {
+  _id: string;
+  name: string;
+  email: string;
+  picture: string;
+  role: string;
+  qualification: string;
+  // ... other fields from API that we might not need
+}
+
 interface Message {
   id: string;
   text: string;
@@ -19,13 +32,6 @@ interface Message {
   time: string;
 }
 
-// Mock data for teachers
-const TEACHERS = [
-  { id: '1', name: 'Dr. Sarah Johnson', subject: 'Mathematics', avatar: 'data:image/jpeg;base64,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', online: true },
-  { id: '2', name: 'Prof. Michael Chen', subject: 'Physics', avatar: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQbHmkXbcUTvBZcGdm8sgealgfrD6sno8DEIQ&s', online: true },
-  { id: '3', name: 'Dr. Emily Wilson', subject: 'Computer Science', avatar: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmUafSaFgZl4haVLyw9ocWSnlyCcYCH8avngcEE8xcJw&s', online: false },
-  { id: '4', name: 'Prof. David Kim', subject: 'Biology', avatar: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRmUafSaFgZl4haVLyw9ocWSnlyCcYCH8avngcEE8xcJw&s', online: true },
-];
 
 const MESSAGES: Message[] = [
   { id: '1', text: 'Hello, how can I help you today?', sender: 'teacher', time: '10:30 AM' },
@@ -37,6 +43,40 @@ const ChatWithTeacherScreen = () => {
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>(MESSAGES);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch teachers from API
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const response = await userAPI.getTeachers();
+        // Handle the nested response structure
+        const teachersData = response.data.data || [];
+        
+        // Transform API response to match our Teacher interface
+        const transformedTeachers: Teacher[] = teachersData.map((teacher: TeacherApiResponse) => ({
+          id: teacher._id,
+          name: teacher.name,
+          subject: teacher.qualification || 'Teacher', // Use qualification as subject
+          avatar: teacher.picture || 'https://via.placeholder.com/50',
+          online: Math.random() > 0.5, // Random online status since API doesn't provide it
+        }));
+        
+        setTeachers(transformedTeachers);
+      } catch (error) {
+        console.error('Failed to fetch teachers:', error);
+        if (axios.isAxiosError(error)) {
+          console.error('Error response:', error.response?.data);
+          console.error('Error status:', error.response?.status);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTeachers();
+  }, []);
 
   const handleSend = () => {
     if (message.trim() === '') return;
@@ -86,12 +126,25 @@ const ChatWithTeacherScreen = () => {
           <View style={styles.header}>
             <StyledText style={styles.headerTitle}>Select a Teacher</StyledText>
           </View>
-          <FlatList
-            data={TEACHERS}
-            keyExtractor={item => item.id}
-            renderItem={renderTeacherItem}
-            contentContainerStyle={styles.teacherList}
-          />
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#00A67E" />
+              <StyledText style={styles.loadingText}>Loading teachers...</StyledText>
+            </View>
+          ) : (
+            <FlatList
+              data={teachers}
+              keyExtractor={item => item.id}
+              renderItem={renderTeacherItem}
+              contentContainerStyle={styles.teacherList}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Icon name="account-search" size={48} color="#ccc" />
+                  <StyledText style={styles.emptyText}>No teachers available</StyledText>
+                </View>
+              }
+            />
+          )}
         </View>
       ) : (
         <View style={styles.chatContainer}>
@@ -304,6 +357,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#00A67E',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Loading and empty states
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
   },
 });
 

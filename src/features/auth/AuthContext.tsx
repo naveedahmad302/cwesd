@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { apiClient, authAPI } from '../../services/api';
 
 type User = {
   id: string;
@@ -35,8 +36,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (storedToken && storedUser) {
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
-          // Set default auth header
-          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          // Set auth header on centralized instance
+          apiClient.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         }
       } catch (error) {
         console.error('Failed to load auth data', error);
@@ -51,17 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
  const login = async (email: string, password: string) => {
   try {
     console.log('Attempting to login with:', { email });
-    const response = await axios.post(
-      'https://cwesd.onrender.com/api/auth/login',
-      { email, password },
-      {
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      }
-    );
+    const response = await authAPI.login(email, password);
 
     console.log('Login response:', response.data);
     const { accessToken: authToken, user: userData } = response.data;
@@ -90,8 +81,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       picture: userData.picture
     }));
     
-    // Set default auth header
-    axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+    // Set auth header on centralized instance
+    apiClient.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
     
     return { success: true, user: userData };
     
@@ -112,17 +103,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = async () => {
     try {
       // Call logout API endpoint
-      await axios.post(
-        'https://cwesd.onrender.com/api/auth/logout',
-        {},
-        {
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        }
-      );
+      await authAPI.logout();
       
       // Clear state
       setToken(null);
@@ -131,15 +112,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Clear storage
       await AsyncStorage.multiRemove(['token', 'user']);
       
-      // Clear auth header
-      delete axios.defaults.headers.common['Authorization'];
+      // Clear auth header from centralized instance
+      delete apiClient.defaults.headers.common['Authorization'];
     } catch (error) {
       console.error('Failed to logout', error);
       // Even if API call fails, still clear local data
       setToken(null);
       setUser(null);
       await AsyncStorage.multiRemove(['token', 'user']);
-      delete axios.defaults.headers.common['Authorization'];
+      delete apiClient.defaults.headers.common['Authorization'];
       throw error;
     }
   };
