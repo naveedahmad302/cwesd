@@ -3,26 +3,12 @@ import { View, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
 import StyledText from './StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { User, House, BookOpen, Calendar, Award, ChartColumn, Settings, MessageSquare } from 'lucide-react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 
+
 const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
-  const { state, ...rest } = props;
-  
-  // Create a new state with filtered routes
-  const mainRoutes = state.routes.filter(
-    (route) => !['Analytics', 'Profile', 'Settings'].includes(route.name)
-  );
-  
-  const newState = {
-    ...state,
-    routes: mainRoutes,
-    index: mainRoutes.findIndex(route => route.key === state.routes[state.index].key)
-  };
-  
-  // Ensure we have a valid index
-  if (newState.index === -1) {
-    newState.index = 0;
-  }
+  const { state } = props;
 
   return (
     <DrawerContentScrollView {...props}>
@@ -33,36 +19,82 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
       <View style={styles.sectionContainer}>
         <StyledText style={styles.sectionTitle}>Quick Access</StyledText>
-        <DrawerItemList state={newState} {...rest} />
+        {state.routes.filter(route => ['Dashboard', 'CourseContent', 'Calendar', 'Chat with Teacher', 'Certificates'].includes(route.name)).map((route) => {
+          const IconComponent = getIconComponent(route.name);
+          return (
+            <DrawerItem 
+              key={route.key}
+              label={formatRouteName(route.name)}
+              onPress={() => props.navigation.navigate(route.name)} 
+              icon={({ size, color }) => <View style={styles.iconContainer}><IconComponent color={state.routeNames[state.index] === route.name ? '#000000' : '#000000'} size={size} /></View>} 
+              labelStyle={[styles.drawerLabel, state.routeNames[state.index] === route.name && styles.activeLabel]}
+              style={[state.routeNames[state.index] === route.name && styles.activeItem]}
+              focused={state.routeNames[state.index] === route.name}
+            />
+          );
+        })}
       </View>
 
       <View style={styles.sectionContainer}>
         <StyledText style={styles.sectionTitle}>Resources</StyledText>
         <DrawerItem 
-          label="Analytics" 
+          label={formatRouteName('Analytics')} 
           onPress={() => props.navigation.navigate('Analytics')} 
-          icon={({ size }) => <View style={styles.iconContainer}><Icon name="chart-line" color="#000000" size={size} /></View>} 
-          labelStyle={styles.drawerLabel}
+          icon={({ size, color }) => <View style={styles.iconContainer}><ChartColumn color={props.state.routeNames[props.state.index] === 'Analytics' ? '#000000' : '#000000'} size={size} /></View>} 
+          labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Analytics' && styles.activeLabel]}
+          style={[props.state.routeNames[props.state.index] === 'Analytics' && styles.activeItem]}
+          focused={props.state.routeNames[props.state.index] === 'Analytics'}
         />
       </View>
 
       <View style={styles.sectionContainer}>
         <StyledText style={styles.sectionTitle}>Account</StyledText>
         <DrawerItem 
-          label="Profile" 
+          label={formatRouteName('Profile')} 
           onPress={() => props.navigation.navigate('Profile')} 
-          icon={({ size }) => <View style={styles.iconContainer}><Icon name="account-circle-outline" color="#000000" size={size} /></View>} 
-          labelStyle={styles.drawerLabel}
+          icon={({ size, color }) => <View style={styles.iconContainer}><User color={props.state.routeNames[props.state.index] === 'Profile' ? '#000000' : '#000000'} size={size} /></View>} 
+          labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Profile' && styles.activeLabel]}
+          style={[props.state.routeNames[props.state.index] === 'Profile' && styles.activeItem]}
+          focused={props.state.routeNames[props.state.index] === 'Profile'}
         />
         <DrawerItem 
-          label="Settings" 
+          label={formatRouteName('Settings')} 
           onPress={() => props.navigation.navigate('Settings')} 
-          icon={({ size }) => <View style={styles.iconContainer}><Icon name="cog-outline" color="#000000" size={size} /></View>} 
-          labelStyle={styles.drawerLabel}
+          icon={({ size, color }) => <View style={styles.iconContainer}><Settings color={props.state.routeNames[props.state.index] === 'Settings' ? '#000000' : '#000000'} size={size} /></View>} 
+          labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Settings' && styles.activeLabel]}
+          style={[props.state.routeNames[props.state.index] === 'Settings' && styles.activeItem]}
+          focused={props.state.routeNames[props.state.index] === 'Settings'}
         />
       </View>
     </DrawerContentScrollView>
   );
+};
+
+// Helper function to format route names for display
+const formatRouteName = (routeName: string) => {
+  const nameMap: { [key: string]: string } = {
+    'Dashboard': 'Dashboard',
+    'CourseContent': 'Course Content',
+    'Calendar': 'Calendar',
+    'Chat with Teacher': 'Chat with Teacher',
+    'Certificates': 'Certificates',
+    'Analytics': 'Analytics',
+    'Profile': 'Profile',
+    'Settings': 'Settings'
+  };
+  return nameMap[routeName] || routeName;
+};
+
+// Helper function to get icon components for routes
+const getIconComponent = (routeName: string) => {
+  const iconMap: { [key: string]: React.ComponentType<any> } = {
+    'Dashboard': House,
+    'CourseContent': BookOpen,
+    'Calendar': Calendar,
+    'Chat with Teacher': MessageSquare,
+    'Certificates': Award
+  };
+  return iconMap[routeName] || House;
 };
 
 const styles = StyleSheet.create({
@@ -100,6 +132,14 @@ const styles = StyleSheet.create({
     color: '#888888',
     marginBottom: 8,
     paddingHorizontal: 10,
+  },
+  activeLabel: {
+    color: 'black',
+    fontWeight: 'bold',
+  },
+  activeItem: {
+    backgroundColor: '#00FFCC',
+    borderRadius: 8,
   },
 });
 

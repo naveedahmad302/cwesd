@@ -14,7 +14,7 @@ const LoginScreen = () => {
 
  const handleLogin = async () => {
   if (!email || !password) {
-    Alert.alert('Error', 'Please enter both email and password.');
+    showErrorToast('Please enter both email and password.', 'Validation Error');
     return;
   }
 
@@ -22,14 +22,12 @@ const LoginScreen = () => {
     setIsLoading(true);
     await login(email, password);
     
-        showSuccessToast(`Welcome back,`, 'Login Successful');
-
+    showSuccessToast(`Welcome back`, 'Login Successful');
 
     // Navigation is handled by the AuthContext and AppNavigator
   } catch (error) {
     console.error('Login error:', error);
-        showErrorToast('Incorrect credentials. Please try again.', 'Login Failed');
-;
+    showErrorToast('Incorrect credentials. Please try again.', 'Login Failed');
   } finally {
     setIsLoading(false);
   }
@@ -79,7 +77,7 @@ const LoginScreen = () => {
 
         <View style={styles.footer}>
           <StyledText style={styles.footerText}>New student? </StyledText>
-          <TouchableOpacity onPress={() => Alert.alert('Sign Up', 'Sign up feature coming soon!')}>
+          <TouchableOpacity onPress={() => showInfoToast('Sign up feature coming soon!', 'Sign Up')}>
             <StyledText style={styles.linkText}>Sign up here</StyledText>
           </TouchableOpacity>
         </View>

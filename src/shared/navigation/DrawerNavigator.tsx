@@ -2,29 +2,61 @@ import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { View, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { House, BookOpen, Calendar, MessageSquare, Award, ChartColumn, User, PanelLeft } from 'lucide-react-native';
+
 
 // Student Screens
 import { DashboardScreen } from '../../features/student';
-import { MyModulesScreen } from '../../features/student';
 import { CalendarScreen } from '../../features/student';
 import { ChatWithTeacherScreen } from '../../features/student';
 import { CertificatesScreen } from '../../features/student';
 import { AnalyticsScreen } from '../../features/student';
-import { ProfileScreen } from '../../features/student';
+import { ProfileScreen } from '../../features/common';
 import { SettingsScreen } from '../../features/common';
+import CourseNavigator from './CourseNavigator';
+import CourseDetailScreen from '../../features/student/CourseDetailScreen';
 
 // Custom Drawer
 import { CustomDrawerContent } from '../components';
+import ProfileHeaderButton from '../components/ProfileHeaderButton';
 
 const Drawer = createDrawerNavigator();
 
 const DrawerNavigator = () => {
   return (
     <Drawer.Navigator
-      initialRouteName="Dashboard" // Set initial route to Dashboard
+      initialRouteName="Dashboard" 
       drawerContent={(props) => <CustomDrawerContent {...props} />}
-      screenOptions={{
-        drawerActiveBackgroundColor: '#00FFCC',
+      screenOptions={({ navigation }) => ({
+        headerShown: true,
+        headerStyle: {
+          backgroundColor: '#F9FAFB',
+          shadowColor: 'transparent',
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 0,
+          elevation: 0,
+        },
+        headerTintColor: 'black',
+        headerTitleStyle: {
+          fontFamily: 'FiraCode-Regular',
+        },
+        headerLeft: () => (
+          <PanelLeft 
+            size={24} 
+            color="black" 
+            style={{ marginLeft: 17 }}
+            onPress={() => navigation.openDrawer()}
+          />
+        ),
+        headerRight: () => (
+          <ProfileHeaderButton 
+            onPress={() => navigation.navigate('Profile')}
+            userType="student"
+            navigation={navigation}
+          />
+        ),
+        drawerActiveBackgroundColor: 'black',
         drawerInactiveBackgroundColor: 'transparent',
         drawerActiveTintColor: '#0C0C1D',
         drawerInactiveTintColor: '#1E1E1E',
@@ -41,50 +73,82 @@ const DrawerNavigator = () => {
           marginVertical: 0,
           paddingHorizontal:10,
         },
-      }}
+        drawerStyle: {
+          shadowColor: 'transparent',
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 0,
+          elevation: 0,
+        },
+      })}
     >
       <Drawer.Screen 
         name="Dashboard" 
         component={DashboardScreen} 
-        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="home-outline" color={color} size={size} /></View> }}
+        options={{ 
+          drawerLabel: 'Dashboard',
+          drawerIcon: ({ color, size }) => <House color={color} size={size} />,
+        }}
       />
       <Drawer.Screen 
-        name="My Modules" 
-        component={MyModulesScreen} 
-        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="book-open-page-variant-outline" color={color} size={size} /></View> }}
+        name="CourseContent" 
+        component={CourseNavigator} 
+        options={{ 
+          drawerLabel: 'Course Content',
+          drawerIcon: ({ color, size }) => <BookOpen color={color} size={size}  />
+
+        }}
       />
       <Drawer.Screen 
         name="Calendar" 
         component={CalendarScreen} 
-        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="calendar-blank-outline" color={color} size={size} /></View> }}
+        options={{ 
+          drawerLabel: 'Calendar',
+          drawerIcon: ({ color, size }) => <Calendar color={color} size={size} />
+        }}
       />
       <Drawer.Screen 
         name="Chat with Teacher" 
         component={ChatWithTeacherScreen} 
         options={{
-          drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="chat-outline" color={color} size={size} /></View>,
-          // drawerItemStyle: { backgroundColor: '#00FFC2' } // Highlight color
+          drawerLabel: 'Chat with Teacher',
+          drawerIcon: ({ color, size }) => <MessageSquare  color={color} size={size} />
         }}
       />
       <Drawer.Screen 
         name="Certificates" 
         component={CertificatesScreen} 
-        options={{ drawerIcon: ({ color, size }) => <View style={styles.iconContainer}><Icon name="certificate-outline" color={color} size={size} /></View> }}
+        options={{ 
+          drawerLabel: 'Certificates',
+          drawerIcon: ({ color, size }) => <Award  color={color} size={size} />
+        }}
       />
       <Drawer.Screen 
         name="Analytics" 
         component={AnalyticsScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="chart-line" color={color} size={size} /> }}
+        options={{ 
+          drawerLabel: 'Analytics',
+          drawerIcon: ({ color, size }) => <ChartColumn color={color} size={size} />
+        }}
       />
       <Drawer.Screen 
         name="Profile" 
         component={ProfileScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="account-circle-outline" color={color} size={size} /> }}
+          options={{ drawerIcon: ({ color, size }) => <User  color={color} size={size} /> }}
       />
       <Drawer.Screen 
         name="Settings" 
         component={SettingsScreen} 
         options={{ drawerIcon: ({ color, size }) => <Icon name="cog-outline" color={color} size={size} /> }}
+      />
+      <Drawer.Screen 
+        name="CourseDetail" 
+        component={CourseDetailScreen} 
+        options={{ 
+          drawerLabel: () => null, // Hide from drawer
+          drawerItemStyle: { display: 'none' }, // Hide from drawer
+          title: 'Course Detail'
+        }}
       />
     </Drawer.Navigator>
   );

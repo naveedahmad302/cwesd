@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import StyledText from './StyledText';
 
@@ -22,8 +23,18 @@ interface CourseCardProps {
 }
 
 const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
+  const navigation = useNavigation();
+
+  const handleCardPress = () => {
+    (navigation as any).navigate('CourseDetail', { course });
+  };
+
   return (
-    <View style={styles.courseCard}>
+    <TouchableOpacity 
+      style={styles.courseCard}
+      onPress={handleCardPress}
+      activeOpacity={0.8}
+    >
       <View style={[styles.cardHeader, { backgroundColor: course.headerColor || '#7c3aed' }]}>
         <View style={styles.headerTop}>
           <View style={styles.headerTags}>
@@ -97,7 +108,7 @@ const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
           <StyledText style={styles.progressText}>{course.progress}%</StyledText>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 

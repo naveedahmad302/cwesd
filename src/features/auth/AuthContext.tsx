@@ -73,18 +73,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // Save to storage
     await AsyncStorage.setItem('token', authToken);
-    await AsyncStorage.setItem('user', JSON.stringify({
-      id: userData._id,
-      name: userData.name,
-      role: userData.role,
-      email: userData.email,
-      picture: userData.picture
-    }));
+    await AsyncStorage.setItem('user', JSON.stringify(userData)); // Store complete user data
     
     // Set auth header on centralized instance
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
-    
-    return { success: true, user: userData };
     
   } catch (error) {
     if (axios.isAxiosError(error)) {

@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, TextInput } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import StyledText from '../../shared/components/StyledText';
 import CourseCard from '../../shared/components/CourseCard';
 import CourseListItem from '../../shared/components/CourseListItem';
+import { coursesAPI } from '../../services/api';
+import { Course, CoursesResponse } from '../../types/course';
 
 const DashboardScreen = () => {
   const [isCardView, setIsCardView] = useState(true);
   const [selectedTab, setSelectedTab] = useState('All Modules');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [filteredCourses, setFilteredCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const tabs = ['All Modules', 'In Progress', 'Completed', 'Upcoming Events'];
   
@@ -21,6 +28,77 @@ const DashboardScreen = () => {
   ];
 
   const completedCount = milestones.filter(m => m.completed).length;
+
+  // Transform API course data to match component interface
+  const transformCourseData = (apiCourse: Course) => {
+    const headerColors = ['#C27AFF', '#FDC700', '#7AB8FE', '#E56B8C', '#4ECDC4'];
+    const randomColor = headerColors[Math.floor(Math.random() * headerColors.length)];
+    
+    return {
+      id: apiCourse._id,
+      title: apiCourse.fullname,
+      instructor: 'Instructor', // API doesn't provide instructor info
+      lessons: Math.floor(Math.random() * 10) + 1, // Random lessons since not in API
+      duration: apiCourse.startDate ? new Date(apiCourse.startDate).toLocaleDateString() : 'Ongoing',
+      level: apiCourse.format === 'topics' ? 'Beginner' : 'Advanced',
+      tags: [apiCourse.shortname],
+      status: apiCourse.visible ? 'in-progress' as const : 'Locked' as const,
+      completedDate: apiCourse.endDate ? `Ends ${new Date(apiCourse.endDate).toLocaleDateString()}` : 'Ongoing',
+      progress: apiCourse.visible ? Math.floor(Math.random() * 80) + 20 : 0,
+      headerColor: randomColor,
+    };
+  };
+
+  // Filter courses based on search query and selected tab
+  useEffect(() => {
+    let filtered = courses;
+
+    // Apply tab filtering
+    if (selectedTab === 'In Progress') {
+      filtered = filtered.filter(course => course.status === 'in-progress');
+    } else if (selectedTab === 'Completed') {
+      filtered = filtered.filter(course => course.status === 'completed');
+    } else if (selectedTab === 'Upcoming Events') {
+      filtered = filtered.filter(course => course.status === 'Locked' || course.progress === 0);
+    }
+    // 'All Modules' shows all courses
+
+    // Apply search filtering
+    if (searchQuery.trim() !== '') {
+      filtered = filtered.filter(course =>
+        course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        course.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        course.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        course.level.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    setFilteredCourses(filtered);
+  }, [courses, searchQuery, selectedTab]);
+
+  // Fetch courses from API
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true);
+        const response = await coursesAPI.getCourses();
+        if (response.data.success) {
+          const transformedCourses = response.data.courses.map(transformCourseData);
+          setCourses(transformedCourses);
+          setFilteredCourses(transformedCourses);
+        } else {
+          setError('Failed to load courses');
+        }
+      } catch (err) {
+        console.error('Error fetching courses:', err);
+        setError('Failed to load courses');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
 
   const mockCourses = [
     {
@@ -67,6 +145,24 @@ const DashboardScreen = () => {
       headerColor: '#7AB8FE',
     },
   ];
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#00FFCC" />
+        <StyledText style={styles.loadingText}>Loading courses...</StyledText>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Icon name="error-outline" size={48} color="#E56B8C" />
+        <StyledText style={styles.errorText}>{error}</StyledText>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -170,23 +266,41 @@ const DashboardScreen = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.searchAndModuleContainer}>
-            <StyledText style={styles.moduleCount}>6 modules</StyledText>
+            <StyledText style={styles.moduleCount}>{filteredCourses.length} modules</StyledText>
             <View style={styles.searchBar}>
               <Icon name="search" size={16} color="#666" style={styles.searchIcon} />
-              <StyledText style={styles.searchInput}>Search modules ...</StyledText>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search modules ..."
+                placeholderTextColor="#999"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
             </View>
           </View>
         </View>
       </View>
 
       <View style={styles.coursesContainer}>
-        {mockCourses.map((course) => (
-          isCardView ? (
-            <CourseCard key={course.id} course={course} />
-          ) : (
-            <CourseListItem key={course.id} course={course} />
-          )
-        ))}
+        {filteredCourses.length > 0 ? (
+          filteredCourses.map((course) => (
+            isCardView ? (
+              <CourseCard key={course.id} course={course} />
+            ) : (
+              <CourseListItem key={course.id} course={course} />
+            )
+          ))
+        ) : (
+          <View style={styles.noCoursesContainer}>
+            <Icon name="school" size={48} color="#ccc" />
+            <StyledText style={styles.noCoursesText}>
+              {searchQuery 
+                ? `No courses found matching "${searchQuery}" in ${selectedTab.toLowerCase()}`
+                : `No courses in ${selectedTab.toLowerCase()}`
+              }
+            </StyledText>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -195,8 +309,44 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
+    padding: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#F8F9FA',
     padding: 20,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#E56B8C',
+    textAlign: 'center',
+  },
+  noCoursesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noCoursesText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
   },
   learningJourneyContainer: {
     // backgroundColor: '#f8f9fa',

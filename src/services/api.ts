@@ -48,6 +48,21 @@ export const authAPI = {
 export const userAPI = {
   getTeachers: () =>
     apiClient.get('/api/users/teachers'),
+  
+  getStudents: () =>
+    apiClient.get('/api/users/students'),
+  
+  getAdmins: () =>
+    apiClient.get('/api/users/admins'),
+  
+  updateProfile: (userId: string, profileData: any) =>
+    apiClient.put(`/api/users/update/${userId}`, profileData),
+};
+
+// Helper functions for courses endpoints
+export const coursesAPI = {
+  getCourses: () =>
+    apiClient.get('/api/courses'),
 };
 
 export default apiClient;

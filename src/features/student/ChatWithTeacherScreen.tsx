@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { userAPI } from '../../services/api';
@@ -45,6 +45,10 @@ const ChatWithTeacherScreen = () => {
   const [messages, setMessages] = useState<Message[]>(MESSAGES);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Teacher[]>([]);
+  const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
 
   // Fetch teachers from API
   useEffect(() => {
@@ -55,15 +59,16 @@ const ChatWithTeacherScreen = () => {
         const teachersData = response.data.data || [];
         
         // Transform API response to match our Teacher interface
-        const transformedTeachers: Teacher[] = teachersData.map((teacher: TeacherApiResponse) => ({
+        const transformedTeachers = teachersData.map((teacher: TeacherApiResponse) => ({
           id: teacher._id,
           name: teacher.name,
-          subject: teacher.qualification || 'Teacher', // Use qualification as subject
-          avatar: teacher.picture || 'https://via.placeholder.com/50',
-          online: Math.random() > 0.5, // Random online status since API doesn't provide it
+          subject: teacher.qualification || 'No subject specified',
+          avatar: teacher.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s',
+          online: Math.random() > 0.5 // Random online status for demo
         }));
         
         setTeachers(transformedTeachers);
+        setAllTeachers(transformedTeachers); // Set all teachers for search
       } catch (error) {
         console.error('Failed to fetch teachers:', error);
         if (axios.isAxiosError(error)) {
@@ -92,6 +97,27 @@ const ChatWithTeacherScreen = () => {
     setMessage('');
   };
 
+  // Search functionality
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (query.trim() === '') {
+      setSearchResults([]);
+    } else {
+      const filtered = allTeachers.filter(teacher =>
+        teacher.name.toLowerCase().includes(query.toLowerCase()) ||
+        teacher.subject.toLowerCase().includes(query.toLowerCase())
+      );
+      setSearchResults(filtered);
+    }
+  };
+
+  const handleSelectTeacher = (teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setShowSearchModal(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
   const renderTeacherItem: ListRenderItem<Teacher> = ({ item }) => (
     <TouchableOpacity 
       style={[styles.teacherItem, selectedTeacher?.id === item.id && styles.selectedTeacher]}
@@ -106,6 +132,23 @@ const ChatWithTeacherScreen = () => {
         <StyledText style={styles.teacherSubject}>{item.subject}</StyledText>
       </View>
       <Icon name="chevron-right" size={24} color="#666" />
+    </TouchableOpacity>
+  );
+
+  const renderSearchTeacherItem: ListRenderItem<Teacher> = ({ item }) => (
+    <TouchableOpacity 
+      style={styles.searchTeacherItem}
+      onPress={() => handleSelectTeacher(item)}
+    >
+      <View style={styles.teacherAvatarContainer}>
+        <Image source={{ uri: item.avatar }} style={styles.teacherAvatar} />
+        {item.online && <View style={styles.onlineIndicator} />}
+      </View>
+      <View style={styles.teacherInfo}>
+        <StyledText style={styles.teacherName}>{item.name}</StyledText>
+        <StyledText style={styles.teacherSubject}>{item.subject}</StyledText>
+      </View>
+      <Icon name="plus" size={24} color="#00A67E" />
     </TouchableOpacity>
   );
 
@@ -124,7 +167,13 @@ const ChatWithTeacherScreen = () => {
       {!selectedTeacher ? (
         <View style={styles.teacherListContainer}>
           <View style={styles.header}>
-            <StyledText style={styles.headerTitle}>Select a Teacher</StyledText>
+            {/* <StyledText style={styles.headerTitle}>Select a Teacher</StyledText> */}
+            <TouchableOpacity 
+              style={styles.plusButton} 
+              onPress={() => setShowSearchModal(true)}
+            >
+              <Icon name="plus" size={24} color="black" />
+            </TouchableOpacity>
           </View>
           {isLoading ? (
             <View style={styles.loadingContainer}>
@@ -187,6 +236,94 @@ const ChatWithTeacherScreen = () => {
           </View>
         </View>
       )}
+      
+      {/* Search Modal */}
+      <Modal
+        visible={showSearchModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setShowSearchModal(false);
+          setSearchQuery('');
+          setSearchResults([]);
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              onPress={() => {
+                setShowSearchModal(false);
+                setSearchQuery('');
+                setSearchResults([]);
+              }}
+              style={styles.closeButton}
+            >
+             
+            </TouchableOpacity>
+            <StyledText style={styles.modalTitle}>Message a Teachers</StyledText>
+            <View style={styles.placeholder} />
+             <Icon name="close" size={24} color="#333" />
+          </View>
+          
+          <View style={styles.searchSection}>
+            <StyledText style={styles.searchSectionTitle}>Select a teacher to start a new conversation.</StyledText>
+            <View style={styles.searchInputContainer}>
+              <Icon name="magnify" size={20} color="#666" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search by name or subject..."
+                placeholderTextColor="#999"
+                value={searchQuery}
+                onChangeText={handleSearch}
+                autoFocus
+              />
+            </View>
+          </View>
+          
+          <View style={styles.resultsSection}>
+            {searchQuery.trim() === '' ? (
+              // Show all teachers when no search query
+              allTeachers.length === 0 ? (
+                <View style={styles.searchPlaceholder}>
+                  <Icon name="account-off" size={48} color="#ccc" />
+                  <StyledText style={styles.searchPlaceholderText}>
+                    No teachers available
+                  </StyledText>
+                </View>
+              ) : (
+                <View style={styles.resultsList}>
+                  {/* <StyledText style={styles.allTeachersTitle}>All Teachers</StyledText> */}
+                  <FlatList
+                    data={allTeachers}
+                    keyExtractor={item => item.id}
+                    renderItem={renderSearchTeacherItem}
+                    contentContainerStyle={styles.teacherList}
+                  />
+                </View>
+              )
+            ) : searchResults.length === 0 ? (
+              <View style={styles.searchPlaceholder}>
+                <Icon name="account-off" size={48} color="#ccc" />
+                <StyledText style={styles.searchPlaceholderText}>
+                  No teachers found
+                </StyledText>
+              </View>
+            ) : (
+              <View style={styles.resultsList}>
+                <StyledText style={styles.searchResultsTitle}>
+                  Search Results ({searchResults.length})
+                </StyledText>
+                <FlatList
+                  data={searchResults}
+                  keyExtractor={item => item.id}
+                  renderItem={renderSearchTeacherItem}
+                  contentContainerStyle={styles.teacherList}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -194,7 +331,7 @@ const ChatWithTeacherScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FAFB',
   },
   // Teacher List Styles
   teacherListContainer: {
@@ -204,6 +341,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
@@ -377,6 +517,117 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+  },
+  // Plus button and modal styles
+  plusButton: {
+    
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth:1,
+    borderColor:'#ddddddff'
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    
+    // borderBottomWidth: 1,
+    // borderBottomColor: '#eee',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  placeholder: {
+    width: 40,
+  },
+  searchSection: {
+    padding: 20,
+    backgroundColor: '#F8F9FA',
+  },
+  searchSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+  },
+  resultsSection: {
+    flex: 1,
+    padding: 16,
+  },
+  resultsList: {
+    flex: 1,
+  },
+  allTeachersTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  searchResultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  searchTeacherItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  searchPlaceholderText: {
     marginTop: 16,
     fontSize: 16,
     color: '#999',
