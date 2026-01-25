@@ -35,7 +35,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         if (storedToken && storedUser) {
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          
+          // Parse stored user data
+          let userData = JSON.parse(storedUser);
+          
+          // Handle legacy data format - if user has _id instead of id, transform it
+          if (userData._id && !userData.id) {
+            console.log('🔄 Migrating legacy user data format');
+            userData = {
+              id: userData._id,
+              name: userData.name,
+              role: userData.role,
+              email: userData.email,
+              picture: userData.picture
+            };
+            
+            // Save the transformed data back to storage
+            await AsyncStorage.setItem('user', JSON.stringify(userData));
+          }
+          
+          setUser(userData);
           // Set auth header on centralized instance
           apiClient.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         }
@@ -62,18 +81,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // Save to state
-    setToken(authToken);
-    setUser({
+    const transformedUser = {
       id: userData._id,
       name: userData.name,
       role: userData.role,
       email: userData.email,
       picture: userData.picture
-    });
+    };
+    setToken(authToken);
+    setUser(transformedUser);
     
-    // Save to storage
+    // Save to storage - store the transformed user data for consistency
     await AsyncStorage.setItem('token', authToken);
-    await AsyncStorage.setItem('user', JSON.stringify(userData)); // Store complete user data
+    await AsyncStorage.setItem('user', JSON.stringify(transformedUser));
     
     // Set auth header on centralized instance
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;

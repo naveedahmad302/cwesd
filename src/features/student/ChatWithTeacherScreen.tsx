@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator, Modal, ScrollView } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { userAPI } from '../../services/api';
+import { userAPI, messagesAPI } from '../../services/api';
+import { realtimeService } from '../../services/realtimeService';
 import axios from 'axios';
+import { useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { Send } from 'lucide-react-native';
+import { useAuth } from '../auth/AuthContext';
 
 // Type definitions
 interface Teacher {
@@ -12,6 +17,8 @@ interface Teacher {
   subject: string;
   avatar: string;
   online: boolean;
+  email: string;
+  role: string;
 }
 
 // API response type
@@ -30,6 +37,10 @@ interface Message {
   text: string;
   sender: 'me' | 'teacher';
   time: string;
+  read?: boolean;
+  edited?: boolean;
+  deleted?: boolean;
+  repliedTo?: string | null;
 }
 
 
@@ -40,15 +51,219 @@ const MESSAGES: Message[] = [
 ];
 
 const ChatWithTeacherScreen = () => {
+  const navigation = useNavigation();
+  const { user } = useAuth();
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Message[]>(MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Teacher[]>([]);
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+
+  // Load chat history when teacher is selected and start real-time polling
+  useEffect(() => {
+    if (selectedTeacher && user) {
+      console.log('🔍 Debug - User object:', user);
+      console.log('🔍 Debug - Selected teacher object:', selectedTeacher);
+      console.log('🔍 Debug - User ID:', user?.id);
+      console.log('🔍 Debug - Teacher ID:', selectedTeacher?.id);
+      console.log('🔍 Debug - User keys:', user ? Object.keys(user) : 'user is null');
+      console.log('🔍 Debug - User _id:', (user as any)?._id); // Check if _id exists instead of id
+      
+      // Validate that we have valid IDs
+      const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
+      const teacherId = selectedTeacher?.id;
+      
+      if (!userId || !teacherId) {
+        console.error('❌ Invalid user IDs:', { 
+          userId: userId, 
+          teacherId: teacherId,
+          userKeys: user ? Object.keys(user) : 'user is null/undefined',
+          teacherKeys: selectedTeacher ? Object.keys(selectedTeacher) : 'teacher is null/undefined',
+          user: user,
+          selectedTeacher: selectedTeacher
+        });
+        return;
+      }
+
+      console.log('✅ Validated IDs:', { userId, teacherId });
+
+      const loadChatHistory = async () => {
+        setIsLoadingMessages(true);
+        try {
+          console.log(`📥 Loading chat history for user ${userId} and teacher ${teacherId}`);
+          const response = await messagesAPI.getChat(userId, teacherId);
+          
+          if (response.status === 200 && response.data) {
+            const chatMessages = response.data.data.map((msg: any) => {
+              console.log('🔍 Raw message from server:', {
+                fullMessage: msg,
+                messageId: msg._id,
+                messageText: msg.text,
+                senderId: msg.senderId,
+                receiverId: msg.receiverId,
+                senderIdObject: typeof msg.senderId,
+                receiverIdObject: typeof msg.receiverId,
+                allKeys: Object.keys(msg),
+                allValues: Object.values(msg)
+              });
+              
+              // Extract the actual ID from the senderId object
+              const actualSenderId = msg.senderId._id;
+              const actualReceiverId = msg.receiverId._id;
+              
+              console.log('🔍 Message debug:', {
+                actualSenderId: actualSenderId,
+                actualReceiverId: actualReceiverId,
+                userId: userId,
+                teacherId: teacherId,
+                isMe: actualSenderId === userId,
+                isTeacher: actualSenderId === teacherId,
+                senderIdMatchesUser: actualSenderId === userId,
+                senderIdMatchesTeacher: actualSenderId === teacherId
+              });
+              
+              const formattedMessage = {
+                id: msg._id,
+                text: msg.text,
+                sender: actualSenderId === userId ? 'me' : 'teacher',
+                time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                read: msg.read,
+                edited: msg.edited,
+                repliedTo: msg.repliedTo
+              };
+              
+              console.log('🔍 Formatted message from history:', {
+                id: formattedMessage.id,
+                text: formattedMessage.text,
+                sender: formattedMessage.sender,
+                time: formattedMessage.time,
+                originalSender: actualSenderId
+              });
+              
+              return formattedMessage;
+            });
+            console.log(`✅ Loaded ${chatMessages.length} messages`);
+            setMessages(chatMessages);
+          } else {
+            console.warn('⚠️ Unexpected response format:', response);
+            setMessages(MESSAGES);
+          }
+        } catch (error: any) {
+          console.error('❌ Failed to load chat history:', error);
+          
+          // Log more details about the error
+          if (error.response) {
+            console.error('❌ Error response:', {
+              status: error.response.status,
+              statusText: error.response.statusText,
+              data: error.response.data
+            });
+            
+            // If we get a 500 error, don't keep trying
+            if (error.response.status === 500) {
+              console.error('❌ Server error - using fallback messages');
+              setMessages(MESSAGES);
+              setIsLoadingMessages(false);
+              return;
+            }
+          }
+          
+          // Use mock messages if API fails
+          setMessages(MESSAGES);
+        } finally {
+          setIsLoadingMessages(false);
+        }
+      };
+
+      loadChatHistory();
+
+      // Start real-time polling only if we have valid IDs
+      if (userId && teacherId) {
+        console.log(`🔄 Starting polling for ${userId} -> ${teacherId}`);
+        realtimeService.startPolling(userId, teacherId, 3000);
+
+        // Listen for new messages
+        const handleNewMessage = (msg: any) => {
+          console.log('🔍 Raw new message from server:', {
+            fullMessage: msg,
+            messageId: msg._id,
+            messageText: msg.text,
+            senderId: msg.senderId,
+            receiverId: msg.receiverId,
+            senderIdObject: typeof msg.senderId,
+            receiverIdObject: typeof msg.receiverId,
+            allKeys: Object.keys(msg),
+            allValues: Object.values(msg)
+          });
+          
+          // Extract the actual ID from the senderId object
+          const actualSenderId = msg.senderId._id;
+          const actualReceiverId = msg.receiverId._id;
+          
+          console.log('🔍 New message debug:', {
+            actualSenderId: actualSenderId,
+            actualReceiverId: actualReceiverId,
+            userId: userId,
+            teacherId: teacherId,
+            isMe: actualSenderId === userId,
+            isTeacher: actualSenderId === teacherId,
+            senderIdMatchesUser: actualSenderId === userId,
+            senderIdMatchesTeacher: actualSenderId === teacherId
+          });
+          
+          const formattedMessage: Message = {
+            id: msg._id,
+            text: msg.text,
+            sender: actualSenderId === userId ? 'me' : 'teacher',
+            time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            read: msg.read,
+            edited: msg.edited,
+            repliedTo: msg.repliedTo
+          };
+          
+          console.log('🔍 Formatted new message:', {
+            id: formattedMessage.id,
+            text: formattedMessage.text,
+            sender: formattedMessage.sender,
+            time: formattedMessage.time,
+            originalSender: actualSenderId
+          });
+          
+          setMessages(prev => {
+            // Check if message already exists
+            const exists = prev.some(m => m.id === formattedMessage.id);
+            if (!exists) {
+              return [...prev, formattedMessage];
+            }
+            return prev;
+          });
+        };
+
+        realtimeService.on('newMessage', handleNewMessage);
+
+        return () => {
+          realtimeService.off('newMessage', handleNewMessage);
+          realtimeService.stopPolling(`${userId}-${teacherId}`);
+        };
+      }
+    }
+  }, [selectedTeacher, user]);
+
+  // Hide/show header based on teacher selection
+  useFocusEffect(
+    React.useCallback(() => {
+      if (selectedTeacher) {
+        navigation.setOptions({ headerShown: false });
+      } else {
+        navigation.setOptions({ headerShown: true });
+      }
+    }, [selectedTeacher, navigation])
+  );
 
   // Fetch teachers from API
   useEffect(() => {
@@ -64,7 +279,9 @@ const ChatWithTeacherScreen = () => {
           name: teacher.name,
           subject: teacher.qualification || 'No subject specified',
           avatar: teacher.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s',
-          online: Math.random() > 0.5 // Random online status for demo
+          online: Math.random() > 0.5, // Random online status for demo
+          email: teacher.email,
+          role: teacher.role
         }));
         
         setTeachers(transformedTeachers);
@@ -83,19 +300,57 @@ const ChatWithTeacherScreen = () => {
     fetchTeachers();
   }, []);
 
-  const handleSend = () => {
-    if (message.trim() === '') return;
+  const handleSend = useCallback(async () => {
+    if (message.trim() === '' || !selectedTeacher || !user) return;
     
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text: message,
-      sender: 'me',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
+    // Validate user IDs before sending
+    const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
+    const teacherId = selectedTeacher?.id;
     
-    setMessages([...messages, newMessage]);
-    setMessage('');
-  };
+    if (!userId || !teacherId) {
+      console.error('Cannot send message - invalid user IDs:', { 
+        userId: userId, 
+        teacherId: teacherId 
+      });
+      return;
+    }
+    
+    try {
+      console.log(`Sending message from ${userId} to ${teacherId}: "${message.trim()}"`);
+      await realtimeService.sendMessage(
+        userId,
+        teacherId,
+        message.trim()
+      );
+      setMessage('');
+    } catch (error: any) {
+      console.error('Failed to send message:', error);
+      
+      // Log more details about the error
+      if (error.response) {
+        console.error('Error response:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        });
+        
+        // If we get a 500 error, show a fallback message locally
+        if (error.response.status === 500) {
+          console.error('❌ Server error - message not sent, showing locally only');
+        }
+      }
+      
+      // Fallback to local message if API fails
+      const fallbackMessage: Message = {
+        id: Date.now().toString(),
+        text: message.trim(),
+        sender: 'me',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, fallbackMessage]);
+      setMessage('');
+    }
+  }, [message, selectedTeacher, user]);
 
   // Search functionality
   const handleSearch = (query: string) => {
@@ -146,21 +401,64 @@ const ChatWithTeacherScreen = () => {
       </View>
       <View style={styles.teacherInfo}>
         <StyledText style={styles.teacherName}>{item.name}</StyledText>
-        <StyledText style={styles.teacherSubject}>{item.subject}</StyledText>
+        {/* <StyledText style={styles.teacherSubject}>{item.subject}</StyledText> */}
+        <StyledText style={styles.teacherEmail}>{item.email}</StyledText>
+        <StyledText style={styles.teacherRole}>{item.role}</StyledText>
       </View>
-      <Icon name="plus" size={24} color="#00A67E" />
+      {/* <Icon name="plus" size={24} color="#00A67E" /> */}
     </TouchableOpacity>
   );
 
-  const renderMessage: ListRenderItem<Message> = ({ item }) => (
+  const renderMessage: ListRenderItem<Message> = ({ item }) => {
+    console.log('🔍 Render message debug:', {
+      messageId: item.id,
+      text: item.text,
+      sender: item.sender,
+      isMe: item.sender === 'me',
+      isTeacher: item.sender === 'teacher'
+    });
+    
+    return (
     <View style={[
-      styles.messageBubble,
-      item.sender === 'me' ? styles.myMessage : styles.teacherMessage
+      styles.messageContainer,
+      item.sender === 'me' ? styles.myMessageContainer : styles.teacherMessageContainer
     ]}>
-      <StyledText style={styles.messageText}>{item.text}</StyledText>
-      <StyledText style={styles.messageTime}>{item.time}</StyledText>
+      {item.sender === 'teacher' && (
+        <Image 
+          source={{ uri: selectedTeacher?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
+          style={styles.messageAvatar} 
+        />
+      )}
+      <View style={styles.messageContentWrapper}>
+        <StyledText style={[
+          styles.senderLabel,
+          item.sender === 'me' ? styles.mySenderLabel : styles.teacherSenderLabel
+        ]}>
+          {item.sender === 'me' ? 'You' : selectedTeacher?.name}
+        </StyledText>
+        <View style={[
+          styles.messageBubble,
+          item.sender === 'me' ? styles.myMessage : styles.teacherMessage
+        ]}>
+          <StyledText style={[
+            styles.messageText,
+            item.sender === 'me' && styles.myMessageText
+          ]}>{item.text}</StyledText>
+        </View>
+        <StyledText style={[
+          styles.messageTime,
+          item.sender === 'me' ? styles.myMessageTime : styles.teacherMessageTime
+        ]}>{item.time}</StyledText>
+      </View>
+      {item.sender === 'me' && (
+        <Image 
+          source={{ uri: user?.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
+          style={styles.messageAvatar} 
+        />
+      )}
     </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -219,6 +517,12 @@ const ChatWithTeacherScreen = () => {
             renderItem={renderMessage}
             contentContainerStyle={styles.messagesList}
             inverted={false}
+            ListHeaderComponent={isLoadingMessages ? (
+              <View style={styles.loadingMessagesContainer}>
+                <ActivityIndicator size="small" color="#00A67E" />
+                <StyledText style={styles.loadingMessagesText}>Loading messages...</StyledText>
+              </View>
+            ) : null}
           />
           
           <View style={styles.inputContainer}>
@@ -226,12 +530,13 @@ const ChatWithTeacherScreen = () => {
               style={styles.input}
               value={message}
               onChangeText={setMessage}
-              placeholder="Type a message..."
-              placeholderTextColor="#999"
+              placeholder="Type a message ..."
+              placeholderTextColor="black"
               multiline
             />
             <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-              <Icon name="send" size={24} color="#fff" />
+              <Send size={24} color="#fff" />
+              
             </TouchableOpacity>
           </View>
         </View>
@@ -250,6 +555,8 @@ const ChatWithTeacherScreen = () => {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
+            <View style={styles.placeholder} />
+            <StyledText style={styles.modalTitle}>Message a Teachers</StyledText>
             <TouchableOpacity 
               onPress={() => {
                 setShowSearchModal(false);
@@ -258,11 +565,8 @@ const ChatWithTeacherScreen = () => {
               }}
               style={styles.closeButton}
             >
-             
+              <Icon name="close" size={24} color="#333" />
             </TouchableOpacity>
-            <StyledText style={styles.modalTitle}>Message a Teachers</StyledText>
-            <View style={styles.placeholder} />
-             <Icon name="close" size={24} color="#333" />
           </View>
           
           <View style={styles.searchSection}>
@@ -395,7 +699,17 @@ const styles = StyleSheet.create({
   },
   teacherSubject: {
     fontSize: 14,
-    color: '#666',
+    color: 'black',
+  },
+  teacherEmail: {
+    fontSize: 12,
+    color: 'black',
+    marginTop: 2,
+  },
+  teacherRole: {
+    fontSize: 12,
+    color: 'black',
+    marginTop: 1,
   },
   // Chat Styles
   chatContainer: {
@@ -438,19 +752,67 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   messagesList: {
-    padding: 16,
+    paddingHorizontal: 2,
+    padding:16,
     paddingBottom: 80,
   },
+  loadingMessagesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
+  loadingMessagesText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+  },
+  messageContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  myMessageContainer: {
+    justifyContent: 'flex-end',
+  },
+  teacherMessageContainer: {
+    justifyContent: 'flex-start',
+  },
+  messageAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#e0e0e0',
+    marginHorizontal: 10,
+    // marginTop: -1,
+  },
+  messageContentWrapper: {
+    maxWidth: '100%',
+  },
+  senderLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  mySenderLabel: {
+    color: '#666',
+    textAlign: 'right',
+  },
+  teacherSenderLabel: {
+    color: '#666',
+    textAlign: 'left',
+  },
+  
   messageBubble: {
     maxWidth: '80%',
     padding: 12,
     borderRadius: 12,
-    marginBottom: 8,
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#DCF8C6',
-    borderTopRightRadius: 4,
+    backgroundColor: '#E56B8C',
+    // borderTopRightRadius: 4,
   },
   teacherMessage: {
     alignSelf: 'flex-start',
@@ -461,15 +823,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  myMessageText: {
+    color: '#fff',
+  },
   messageTime: {
     fontSize: 10,
     color: '#666',
-    marginTop: 4,
+    marginTop: 2,
+  },
+  myMessageTime: {
+    color: '#666',
     textAlign: 'right',
+  },
+  teacherMessageTime: {
+    color: '#666',
+    textAlign: 'left',
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 8,
+    padding: 20,
+    paddingBottom:30,
+    // paddingTop:30,
+    // paddingVertical:0,
     borderTopWidth: 1,
     borderTopColor: '#eee',
     backgroundColor: '#fff',
@@ -481,8 +856,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
+    
     borderColor: '#ddd',
-    borderRadius: 20,
+    borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 8,
@@ -493,8 +869,8 @@ const styles = StyleSheet.create({
   sendButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#00A67E',
+    borderRadius: 8,
+    backgroundColor: '#E56B8C',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -524,7 +900,6 @@ const styles = StyleSheet.create({
   },
   // Plus button and modal styles
   plusButton: {
-    
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -587,7 +962,7 @@ const styles = StyleSheet.create({
   },
   resultsSection: {
     flex: 1,
-    padding: 16,
+    padding: 1,
   },
   resultsList: {
     flex: 1,
@@ -612,14 +987,14 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    // backgroundColor: '#F9FAFB',
+    // borderWidth: 1,
+    // borderColor: '#e0e0e0',
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 2 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 4,
+    // elevation: 3,
   },
   searchPlaceholder: {
     flex: 1,

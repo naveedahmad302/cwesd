@@ -65,4 +65,31 @@ export const coursesAPI = {
     apiClient.get('/api/courses'),
 };
 
+// Helper functions for messages endpoints
+export const messagesAPI = {
+  send: (senderId: string, receiverId: string, text: string, repliedTo?: string) =>
+    apiClient.post('/api/messages/send', { senderId, receiverId, text, repliedTo }),
+  
+  edit: (messageId: string, userId: string, text: string) =>
+    apiClient.post(`/api/messages/edit/${messageId}`, { userId, text }),
+  
+  delete: (messageId: string, userId: string) =>
+    apiClient.delete(`/api/messages/delete/${messageId}`, { data: { userId } }),
+  
+  reply: (messageId: string, senderId: string, text: string) =>
+    apiClient.post(`/api/messages/reply/${messageId}`, { senderId, text }),
+  
+  clearChatMessages: (chatId: string, userId: string) =>
+    apiClient.delete(`/api/messages/chat/${chatId}/messages`, { data: { userId } }),
+  
+  deleteChat: (chatId: string, userId: string) =>
+    apiClient.delete(`/api/messages/chat/${chatId}`, { data: { userId } }),
+  
+  getChat: (senderId: string, receiverId: string) =>
+    apiClient.get(`/api/messages/chat/${senderId}/${receiverId}`),
+  
+  getUserMessages: (userId: string) =>
+    apiClient.get(`/api/messages/user/${userId}`),
+};
+
 export default apiClient;
