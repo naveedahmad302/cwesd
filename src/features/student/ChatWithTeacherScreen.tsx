@@ -67,65 +67,24 @@ const ChatWithTeacherScreen = () => {
   // Load chat history when teacher is selected and start real-time polling
   useEffect(() => {
     if (selectedTeacher && user) {
-      console.log('🔍 Debug - User object:', user);
-      console.log('🔍 Debug - Selected teacher object:', selectedTeacher);
-      console.log('🔍 Debug - User ID:', user?.id);
-      console.log('🔍 Debug - Teacher ID:', selectedTeacher?.id);
-      console.log('🔍 Debug - User keys:', user ? Object.keys(user) : 'user is null');
-      console.log('🔍 Debug - User _id:', (user as any)?._id); // Check if _id exists instead of id
-      
       // Validate that we have valid IDs
       const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
       const teacherId = selectedTeacher?.id;
       
       if (!userId || !teacherId) {
-        console.error('❌ Invalid user IDs:', { 
-          userId: userId, 
-          teacherId: teacherId,
-          userKeys: user ? Object.keys(user) : 'user is null/undefined',
-          teacherKeys: selectedTeacher ? Object.keys(selectedTeacher) : 'teacher is null/undefined',
-          user: user,
-          selectedTeacher: selectedTeacher
-        });
         return;
       }
-
-      console.log('✅ Validated IDs:', { userId, teacherId });
 
       const loadChatHistory = async () => {
         setIsLoadingMessages(true);
         try {
-          console.log(`📥 Loading chat history for user ${userId} and teacher ${teacherId}`);
           const response = await messagesAPI.getChat(userId, teacherId);
           
           if (response.status === 200 && response.data) {
             const chatMessages = response.data.data.map((msg: any) => {
-              console.log('🔍 Raw message from server:', {
-                fullMessage: msg,
-                messageId: msg._id,
-                messageText: msg.text,
-                senderId: msg.senderId,
-                receiverId: msg.receiverId,
-                senderIdObject: typeof msg.senderId,
-                receiverIdObject: typeof msg.receiverId,
-                allKeys: Object.keys(msg),
-                allValues: Object.values(msg)
-              });
-              
               // Extract the actual ID from the senderId object
               const actualSenderId = msg.senderId._id;
               const actualReceiverId = msg.receiverId._id;
-              
-              console.log('🔍 Message debug:', {
-                actualSenderId: actualSenderId,
-                actualReceiverId: actualReceiverId,
-                userId: userId,
-                teacherId: teacherId,
-                isMe: actualSenderId === userId,
-                isTeacher: actualSenderId === teacherId,
-                senderIdMatchesUser: actualSenderId === userId,
-                senderIdMatchesTeacher: actualSenderId === teacherId
-              });
               
               const formattedMessage = {
                 id: msg._id,
@@ -137,36 +96,17 @@ const ChatWithTeacherScreen = () => {
                 repliedTo: msg.repliedTo
               };
               
-              console.log('🔍 Formatted message from history:', {
-                id: formattedMessage.id,
-                text: formattedMessage.text,
-                sender: formattedMessage.sender,
-                time: formattedMessage.time,
-                originalSender: actualSenderId
-              });
-              
               return formattedMessage;
             });
-            console.log(`✅ Loaded ${chatMessages.length} messages`);
             setMessages(chatMessages);
           } else {
-            console.warn('⚠️ Unexpected response format:', response);
             setMessages(MESSAGES);
           }
         } catch (error: any) {
-          console.error('❌ Failed to load chat history:', error);
-          
           // Log more details about the error
           if (error.response) {
-            console.error('❌ Error response:', {
-              status: error.response.status,
-              statusText: error.response.statusText,
-              data: error.response.data
-            });
-            
             // If we get a 500 error, don't keep trying
             if (error.response.status === 500) {
-              console.error('❌ Server error - using fallback messages');
               setMessages(MESSAGES);
               setIsLoadingMessages(false);
               return;
@@ -184,37 +124,13 @@ const ChatWithTeacherScreen = () => {
 
       // Start real-time polling only if we have valid IDs
       if (userId && teacherId) {
-        console.log(`🔄 Starting polling for ${userId} -> ${teacherId}`);
         realtimeService.startPolling(userId, teacherId, 3000);
 
         // Listen for new messages
         const handleNewMessage = (msg: any) => {
-          console.log('🔍 Raw new message from server:', {
-            fullMessage: msg,
-            messageId: msg._id,
-            messageText: msg.text,
-            senderId: msg.senderId,
-            receiverId: msg.receiverId,
-            senderIdObject: typeof msg.senderId,
-            receiverIdObject: typeof msg.receiverId,
-            allKeys: Object.keys(msg),
-            allValues: Object.values(msg)
-          });
-          
           // Extract the actual ID from the senderId object
           const actualSenderId = msg.senderId._id;
           const actualReceiverId = msg.receiverId._id;
-          
-          console.log('🔍 New message debug:', {
-            actualSenderId: actualSenderId,
-            actualReceiverId: actualReceiverId,
-            userId: userId,
-            teacherId: teacherId,
-            isMe: actualSenderId === userId,
-            isTeacher: actualSenderId === teacherId,
-            senderIdMatchesUser: actualSenderId === userId,
-            senderIdMatchesTeacher: actualSenderId === teacherId
-          });
           
           const formattedMessage: Message = {
             id: msg._id,
@@ -225,14 +141,6 @@ const ChatWithTeacherScreen = () => {
             edited: msg.edited,
             repliedTo: msg.repliedTo
           };
-          
-          console.log('🔍 Formatted new message:', {
-            id: formattedMessage.id,
-            text: formattedMessage.text,
-            sender: formattedMessage.sender,
-            time: formattedMessage.time,
-            originalSender: actualSenderId
-          });
           
           setMessages(prev => {
             // Check if message already exists
@@ -287,10 +195,8 @@ const ChatWithTeacherScreen = () => {
         setTeachers(transformedTeachers);
         setAllTeachers(transformedTeachers); // Set all teachers for search
       } catch (error) {
-        console.error('Failed to fetch teachers:', error);
         if (axios.isAxiosError(error)) {
-          console.error('Error response:', error.response?.data);
-          console.error('Error status:', error.response?.status);
+          // Handle axios error
         }
       } finally {
         setIsLoading(false);
@@ -308,15 +214,10 @@ const ChatWithTeacherScreen = () => {
     const teacherId = selectedTeacher?.id;
     
     if (!userId || !teacherId) {
-      console.error('Cannot send message - invalid user IDs:', { 
-        userId: userId, 
-        teacherId: teacherId 
-      });
       return;
     }
     
     try {
-      console.log(`Sending message from ${userId} to ${teacherId}: "${message.trim()}"`);
       await realtimeService.sendMessage(
         userId,
         teacherId,
@@ -324,19 +225,11 @@ const ChatWithTeacherScreen = () => {
       );
       setMessage('');
     } catch (error: any) {
-      console.error('Failed to send message:', error);
-      
       // Log more details about the error
       if (error.response) {
-        console.error('Error response:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data
-        });
-        
         // If we get a 500 error, show a fallback message locally
         if (error.response.status === 500) {
-          console.error('❌ Server error - message not sent, showing locally only');
+          // Server error - message not sent, showing locally only
         }
       }
       
@@ -410,53 +303,46 @@ const ChatWithTeacherScreen = () => {
   );
 
   const renderMessage: ListRenderItem<Message> = ({ item }) => {
-    console.log('🔍 Render message debug:', {
-      messageId: item.id,
-      text: item.text,
-      sender: item.sender,
-      isMe: item.sender === 'me',
-      isTeacher: item.sender === 'teacher'
-    });
+    const isMyMessage = item.sender === 'me';
     
     return (
-    <View style={[
-      styles.messageContainer,
-      item.sender === 'me' ? styles.myMessageContainer : styles.teacherMessageContainer
-    ]}>
-      {item.sender === 'teacher' && (
-        <Image 
-          source={{ uri: selectedTeacher?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
-          style={styles.messageAvatar} 
-        />
-      )}
-      <View style={styles.messageContentWrapper}>
-        <StyledText style={[
-          styles.senderLabel,
-          item.sender === 'me' ? styles.mySenderLabel : styles.teacherSenderLabel
-        ]}>
-          {item.sender === 'me' ? 'You' : selectedTeacher?.name}
-        </StyledText>
-        <View style={[
-          styles.messageBubble,
-          item.sender === 'me' ? styles.myMessage : styles.teacherMessage
-        ]}>
+      <View style={[
+        styles.messageContainer,
+        isMyMessage ? styles.myMessageContainer : styles.teacherMessageContainer
+      ]}>
+        {!isMyMessage && (
+          <Image 
+            source={{ uri: selectedTeacher?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
+            style={styles.messageAvatar} 
+          />
+        )}
+        <View style={styles.messageContentWrapper}>
+          {!isMyMessage && (
+            <StyledText style={styles.teacherSenderLabel}>
+              {selectedTeacher?.name}
+            </StyledText>
+          )}
+          <View style={[
+            styles.messageBubble,
+            isMyMessage ? styles.myMessage : styles.teacherMessage
+          ]}>
+            <StyledText style={[
+              styles.messageText,
+              isMyMessage && styles.myMessageText
+            ]}>{item.text}</StyledText>
+          </View>
           <StyledText style={[
-            styles.messageText,
-            item.sender === 'me' && styles.myMessageText
-          ]}>{item.text}</StyledText>
+            styles.messageTime,
+            isMyMessage ? styles.myMessageTime : styles.teacherMessageTime
+          ]}>{item.time}</StyledText>
         </View>
-        <StyledText style={[
-          styles.messageTime,
-          item.sender === 'me' ? styles.myMessageTime : styles.teacherMessageTime
-        ]}>{item.time}</StyledText>
+        {isMyMessage && (
+          <Image 
+            source={{ uri: user?.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
+            style={styles.messageAvatar} 
+          />
+        )}
       </View>
-      {item.sender === 'me' && (
-        <Image 
-          source={{ uri: user?.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
-          style={styles.messageAvatar} 
-        />
-      )}
-    </View>
     );
   };
 

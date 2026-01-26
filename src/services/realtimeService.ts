@@ -62,11 +62,8 @@ class RealtimeService {
   startPolling(senderId: string, receiverId: string, interval: number = 3000) {
     // Validate inputs
     if (!senderId || !receiverId) {
-      console.error('❌ Invalid senderId or receiverId for polling:', { senderId, receiverId });
       return;
     }
-
-    console.log('✅ Starting polling with valid IDs:', { senderId, receiverId });
 
     const chatId = `${senderId}-${receiverId}`;
     
@@ -75,7 +72,6 @@ class RealtimeService {
 
     const pollInterval = setInterval(async () => {
       try {
-        console.log(`Polling for messages between ${senderId} and ${receiverId}`);
         const response = await messagesAPI.getChat(senderId, receiverId);
         
         // Reset retry attempts on success
@@ -83,13 +79,6 @@ class RealtimeService {
         
         if (response.status === 200 && response.data) {
           const messages = response.data.data || [];
-          console.log('🔍 Raw API response structure:', {
-            status: response.status,
-            dataStructure: response.data,
-            messagesArray: messages,
-            messagesCount: messages.length
-          });
-          console.log(`Found ${messages.length} messages`);
           
           // Get the last known message time for this chat
           const lastTime = this.lastMessageTimes.get(chatId);
@@ -102,20 +91,6 @@ class RealtimeService {
 
           // Emit new messages
           newMessages.forEach((message: Message) => {
-            console.log('🔍 New message details:', {
-              messageId: message._id,
-              text: message.text,
-              senderId: message.senderId,
-              senderIdType: typeof message.senderId,
-              actualSenderId: message.senderId._id,
-              originalSenderId: senderId,
-              originalReceiverId: receiverId,
-              isFromOriginalSender: message.senderId._id === senderId,
-              isFromOriginalReceiver: message.senderId._id === receiverId,
-              createdAt: message.createdAt,
-              allKeys: Object.keys(message),
-              allValues: Object.values(message)
-            });
             this.emit('newMessage', message);
           });
 
@@ -124,38 +99,22 @@ class RealtimeService {
             const latestMessage = messages[messages.length - 1];
             this.lastMessageTimes.set(chatId, latestMessage.createdAt);
           }
-        } else {
-          console.warn('Unexpected response format:', response);
         }
       } catch (error: any) {
-        console.error('Polling error:', error);
-        
         // Log more details about the error
         if (error.response) {
-          console.error('Error response:', {
-            status: error.response.status,
-            statusText: error.response.statusText,
-            data: error.response.data
-          });
-          
           // If we get a 500 error, implement retry logic
           if (error.response.status === 500) {
             const currentRetries = this.retryAttempts.get(chatId) || 0;
             
             if (currentRetries >= this.maxRetries) {
-              console.error(`❌ Max retries (${this.maxRetries}) reached for chat ${chatId} - stopping polling`);
               this.stopPolling(chatId);
               return;
             }
             
             this.retryAttempts.set(chatId, currentRetries + 1);
-            console.error(`❌ Server error (500) - retry attempt ${currentRetries + 1}/${this.maxRetries}`);
             return; // Skip this iteration but continue polling
           }
-        } else if (error.request) {
-          console.error('No response received:', error.request);
-        } else {
-          console.error('Error setting up request:', error.message);
         }
         
         // Don't emit errors to avoid disrupting the UI
@@ -185,36 +144,15 @@ class RealtimeService {
 
   // Send a message and immediately emit it for better UX
   async sendMessage(senderId: string, receiverId: string, text: string, repliedTo?: string) {
-    console.log('🔍 Sending message with details:', {
-      senderId: senderId,
-      senderIdType: typeof senderId,
-      receiverId: receiverId,
-      receiverIdType: typeof receiverId,
-      text: text,
-      repliedTo: repliedTo
-    });
-    
     try {
       const response = await messagesAPI.send(senderId, receiverId, text, repliedTo);
       const message = response.data.data;
-      
-      console.log('🔍 Message sent successfully, server response:', {
-        messageId: message._id,
-        messageSenderId: message.senderId,
-        messageSenderIdType: typeof message.senderId,
-        messageSenderIdObject: message.senderId._id,
-        messageText: message.text,
-        createdAt: message.createdAt,
-        allKeys: Object.keys(message),
-        allValues: Object.values(message)
-      });
       
       // Emit immediately for better UX
       this.emit('newMessage', message);
       
       return message;
     } catch (error) {
-      console.error('Failed to send message:', error);
       throw error;
     }
   }
@@ -228,7 +166,6 @@ class RealtimeService {
       this.emit('messageEdited', message);
       return message;
     } catch (error) {
-      console.error('Failed to edit message:', error);
       throw error;
     }
   }
@@ -239,7 +176,6 @@ class RealtimeService {
       await messagesAPI.delete(messageId, userId);
       this.emit('messageDeleted', messageId);
     } catch (error) {
-      console.error('Failed to delete message:', error);
       throw error;
     }
   }

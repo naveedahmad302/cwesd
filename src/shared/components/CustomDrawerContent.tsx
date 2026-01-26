@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
 import StyledText from './StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { User, House, BookOpen, Calendar, Award, ChartColumn, Settings, MessageSquare } from 'lucide-react-native';
+import { User, House, BookOpen, Calendar, Award, ChartColumn, MessageSquare } from 'lucide-react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 
 
@@ -57,14 +57,6 @@ const CustomDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
           style={[props.state.routeNames[props.state.index] === 'Profile' && styles.activeItem]}
           focused={props.state.routeNames[props.state.index] === 'Profile'}
         />
-        <DrawerItem 
-          label={formatRouteName('Settings')} 
-          onPress={() => props.navigation.navigate('Settings')} 
-          icon={({ size, color }) => <View style={styles.iconContainer}><Settings color={props.state.routeNames[props.state.index] === 'Settings' ? '#000000' : '#000000'} size={size} /></View>} 
-          labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Settings' && styles.activeLabel]}
-          style={[props.state.routeNames[props.state.index] === 'Settings' && styles.activeItem]}
-          focused={props.state.routeNames[props.state.index] === 'Settings'}
-        />
       </View>
     </DrawerContentScrollView>
   );
@@ -79,8 +71,7 @@ const formatRouteName = (routeName: string) => {
     'Chat with Teacher': 'Chat with Teacher',
     'Certificates': 'Certificates',
     'Analytics': 'Analytics',
-    'Profile': 'Profile',
-    'Settings': 'Settings'
+    'Profile': 'Profile'
   };
   return nameMap[routeName] || routeName;
 };

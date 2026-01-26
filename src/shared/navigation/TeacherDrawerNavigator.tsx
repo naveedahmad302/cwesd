@@ -1,7 +1,7 @@
 import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { View, StyleSheet } from 'react-native';
-import { House, BookOpen, Users, ClipboardCheck, FileCheck, HelpCircle, MessageSquare, Video, Calendar as CalendarIcon, User, Settings, PanelLeft } from 'lucide-react-native';
+import { House, BookOpen, Users, ClipboardCheck, FileCheck, HelpCircle, MessageSquare, Video, Calendar as CalendarIcon, User, PanelLeft } from 'lucide-react-native';
 
 // Teacher Screens
 import { TeacherDashboardScreen } from '../../features/teacher';
@@ -13,7 +13,6 @@ import { TeacherQuizzesScreen } from '../../features/teacher';
 import { TeacherChatScreen } from '../../features/teacher';
 import { TeacherWebinarScreen } from '../../features/teacher';
 import { ProfileScreen } from '../../features/common';
-import { SettingsScreen } from '../../features/common';
 
 // Custom Drawer
 import { TeacherDrawerContent } from '../components';
@@ -151,14 +150,6 @@ const TeacherDrawerNavigator = () => {
         options={{ 
           drawerLabel: 'Profile',
           drawerIcon: ({ color, size }) => <User color={color} size={size} />
-        }}
-      />
-      <Drawer.Screen 
-        name="Settings" 
-        component={SettingsScreen} 
-        options={{ 
-          drawerLabel: 'Settings',
-          drawerIcon: ({ color, size }) => <Settings color={color} size={size} />
         }}
       />
     </Drawer.Navigator>

@@ -12,7 +12,6 @@ import { ChatWithTeacherScreen } from '../../features/student';
 import { CertificatesScreen } from '../../features/student';
 import { AnalyticsScreen } from '../../features/student';
 import { ProfileScreen } from '../../features/common';
-import { SettingsScreen } from '../../features/common';
 import CourseNavigator from './CourseNavigator';
 import CourseDetailScreen from '../../features/student/CourseDetailScreen';
 
@@ -134,12 +133,7 @@ const DrawerNavigator = () => {
       <Drawer.Screen 
         name="Profile" 
         component={ProfileScreen} 
-          options={{ drawerIcon: ({ color, size }) => <User  color={color} size={size} /> }}
-      />
-      <Drawer.Screen 
-        name="Settings" 
-        component={SettingsScreen} 
-        options={{ drawerIcon: ({ color, size }) => <Icon name="cog-outline" color={color} size={size} /> }}
+        options={{ drawerIcon: ({ color, size }) => <User  color={color} size={size} /> }}
       />
       <Drawer.Screen 
         name="CourseDetail" 
