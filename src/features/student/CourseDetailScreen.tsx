@@ -3,13 +3,25 @@ import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import StyledText from '../../shared/components/StyledText';
 import CourseSidebar from '../../shared/components/CourseSidebar';
-import { MessageSquare, ExternalLink, Menu, CircleCheckBig } from 'lucide-react-native';
+import ContentDetailCard, { ContentDetailAction } from '../../shared/components/ContentDetailCard';
+import QuizStartScreen from '../../shared/components/QuizStartScreen';
+import QuizResultsScreen from '../../shared/components/QuizResultsScreen';
+import { MessageSquare, ExternalLink, Menu, CircleCheckBig, HelpCircle } from 'lucide-react-native';
 
 const CourseDetailScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { course } = route.params as { course: any };
+  console.log('CourseDetailScreen - route.params:', route.params);
+  console.log('CourseDetailScreen - course:', course);
+  
   const [showSidebar, setShowSidebar] = useState(false);
+  const [selectedContent, setSelectedContent] = useState<{
+    type: 'quiz' | 'assignment' | 'lecture';
+    title: string;
+    description: string;
+    data?: any; // Store the original data for each content type
+  } | null>(null);
 
   const handleHeaderClick = () => {
     setShowSidebar(true);
@@ -34,62 +46,277 @@ const CourseDetailScreen: React.FC = () => {
     console.log('Marking as complete:', course.title);
   };
 
+  const handleQuizClick = (quiz: any) => {
+    setSelectedContent({
+      type: 'quiz',
+      title: quiz.title,
+      description: 'Take this quiz to test your knowledge',
+      data: quiz
+    });
+  };
+
+  const handleAssignmentClick = (assignment: any) => {
+    setSelectedContent({
+      type: 'assignment',
+      title: assignment.name,
+      description: 'Complete this assignment to demonstrate your understanding',
+      data: assignment
+    });
+  };
+
+  const handleLectureClick = (lecture: any) => {
+    setSelectedContent({
+      type: 'lecture',
+      title: lecture.name,
+      description: 'Watch this lecture to learn the key concepts',
+      data: lecture
+    });
+  };
+
+  const isQuizSubmitted = (quiz: any) => {
+    // Check if the current user has submitted this quiz
+    // For now, we'll check if there are any submissions
+    // In a real implementation, you'd check against the current user ID
+    return quiz.submittedBy && quiz.submittedBy.length > 0;
+  };
+
+  const getCurrentUserSubmission = (quiz: any) => {
+    // Get the current user's submission
+    // For now, we'll return the first submission
+    // In a real implementation, you'd filter by current user ID
+    return quiz.submittedBy && quiz.submittedBy.length > 0 ? quiz.submittedBy[0] : null;
+  };
+
+  const handleStartQuiz = () => {
+    console.log('Starting quiz:', selectedContent?.title);
+    // Handle quiz start logic here
+  };
+
+  const handleRetakeQuiz = () => {
+    console.log('Retaking quiz:', selectedContent?.title);
+    // Handle quiz retake logic here
+    // This would typically reset the quiz state and show QuizStartScreen again
+  };
+
+  const handleBackToAnnouncements = () => {
+    setSelectedContent(null);
+  };
+
+  const getQuizActions = (): ContentDetailAction[] => {
+    if (selectedContent?.type === 'quiz') {
+      return [
+        {
+          id: 'open',
+          title: 'Open Content',
+          type: 'primary',
+          onPress: handleOpenContent
+        },
+        {
+          id: 'submit',
+          title: 'Submit Quiz',
+          type: 'primary',
+          onPress: () => console.log('Submit quiz')
+        },
+        {
+          id: 'moodle',
+          title: 'Open in Moodle',
+          type: 'secondary',
+          onPress: handleOpenInMoodle,
+          icon: <ExternalLink size={16} color="#FF6B6B" />
+        },
+        {
+          id: 'complete',
+          title: 'Mark Complete',
+          type: 'secondary',
+          onPress: handleMarkComplete,
+          icon: <CircleCheckBig size={16} color="#FF6B6B" />
+        }
+      ];
+    } else if (selectedContent?.type === 'assignment') {
+      return [
+        {
+          id: 'open',
+          title: 'Open Content',
+          type: 'primary',
+          onPress: handleOpenContent,
+          icon: <ExternalLink size={16} color="#ffffff" />
+        },
+        {
+          id: 'submit',
+          title: 'Submit Assignment',
+          type: 'primary',
+          onPress: () => console.log('Submit assignment'),
+          icon: <MessageSquare size={16} color="#111827" />
+        },
+        {
+          id: 'moodle',
+          title: 'Open in Moodle',
+          type: 'secondary',
+          onPress: handleOpenInMoodle,
+          icon: <ExternalLink size={16} color="#FF6B6B" />
+        },
+        {
+          id: 'complete',
+          title: 'Mark Complete',
+          type: 'secondary',
+          onPress: handleMarkComplete,
+          icon: <CircleCheckBig size={16} color="#FF6B6B" />
+        }
+      ];
+    } else if (selectedContent?.type === 'lecture') {
+      return [
+        {
+          id: 'open',
+          title: 'Open Content',
+          type: 'primary',
+          onPress: handleOpenContent
+        },
+        {
+          id: 'download',
+          title: 'Download',
+          type: 'primary',
+          onPress: () => console.log('Download lecture')
+        },
+        {
+          id: 'moodle',
+          title: 'Open in Moodle',
+          type: 'secondary',
+          onPress: handleOpenInMoodle,
+          icon: <ExternalLink size={16} color="#FF6B6B" />
+        },
+        {
+          id: 'complete',
+          title: 'Mark Complete',
+          type: 'secondary',
+          onPress: handleMarkComplete,
+          icon: <CircleCheckBig size={16} color="#FF6B6B" />
+        }
+      ];
+    }
+    return [];
+  };
+
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {/* Header */}
-        <TouchableOpacity style={styles.header} onPress={handleHeaderClick}>
-          <View style={styles.menuButton}>
-            <Menu size={17} color="#000" />
-          </View>
-          <StyledText style={styles.title}>Course Content</StyledText>
-        </TouchableOpacity>
-
-        {/* Announcements Card */}
-        <View style={styles.announcementsCard}>
-          <View style={styles.cardHeader}>
-            <View style={styles.iconContainer}>
-              <MessageSquare size={32} color="#E56B8C" />
+      {selectedContent && selectedContent.type === 'quiz' ? (
+        // Check if quiz is submitted
+        isQuizSubmitted(selectedContent.data) ? (
+          // Show QuizResultsScreen for submitted quizzes
+          <QuizResultsScreen
+            title={selectedContent.title}
+            description={selectedContent.description}
+            totalPoints={selectedContent.data?.totalPoints}
+            marksObtained={getCurrentUserSubmission(selectedContent.data)?.marksObtained || 0}
+            duration={selectedContent.data?.durationMinutes}
+            maxAttempts={selectedContent.data?.maxAttempts}
+            attemptsUsed={selectedContent.data?.submittedBy?.length || 0}
+            onClose={handleBackToAnnouncements}
+            onRetakeQuiz={handleRetakeQuiz}
+            onNavigateToQuiz={handleQuizClick}
+            onNavigateToAssignment={handleAssignmentClick}
+            onNavigateToLecture={handleLectureClick}
+            courseId={course?.id}
+            moodleId={course?.moodleId?.toString()}
+          />
+        ) : (
+          // Show QuizStartScreen for unsubmitted quizzes
+          <QuizStartScreen
+            title={selectedContent.title}
+            description={selectedContent.description}
+            duration={selectedContent.data?.durationMinutes}
+            points={selectedContent.data?.totalPoints}
+            questions={10} // Default number of questions
+            maxAttempts={selectedContent.data?.maxAttempts}
+            availableFrom={selectedContent.data?.availableFrom}
+            availableUntil={selectedContent.data?.availableUntil}
+            quizId={selectedContent.data?._id ?? selectedContent.data?.id}
+            onStartQuiz={handleStartQuiz}
+            onClose={handleBackToAnnouncements}
+            onNavigateToQuiz={handleQuizClick}
+            onNavigateToAssignment={handleAssignmentClick}
+            onNavigateToLecture={handleLectureClick}
+            courseId={course?.id}
+            moodleId={course?.moodleId?.toString()}
+          />
+        )
+      ) : (
+        // Show normal CourseDetailScreen content
+        <ScrollView style={styles.scrollView}>
+          {/* Header */}
+          <TouchableOpacity style={styles.header} onPress={handleHeaderClick}>
+            <View style={styles.menuButton}>
+              <Menu size={17} color="#000" />
             </View>
-            <View style={styles.headerContent}>
-              <StyledText style={styles.cardTitle}>Announcements</StyledText>
-              <StyledText style={styles.cardSubtitle}>
-                Join the discussion with your classmates
-              </StyledText>
-            </View>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.openContentButton}
-            onPress={handleOpenContent}
-          >
-            <ExternalLink strokeWidth={1.75} size={20} color="#fff" style={styles.buttonIcon} />
-            <StyledText style={styles.openContentText}>Open Content</StyledText>
+            <StyledText style={styles.title}>Course Content</StyledText>
           </TouchableOpacity>
-        </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.moodleButton}
-            onPress={handleOpenInMoodle}
-          >
-            <ExternalLink size={20} color="#fff" style={styles.buttonIcon} />
-            <StyledText style={styles.moodleButtonText}>Open in Moodle</StyledText>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.completeButton}
-            onPress={handleMarkComplete}
-          >
-            <CircleCheckBig strokeWidth={1.75} size={20} color="black" style={styles.buttonIcon} />
-            <StyledText style={styles.completeButtonText}>Mark Complete</StyledText>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          {/* Content Card - Either Announcements or Content Detail */}
+          {selectedContent ? (
+            <ContentDetailCard
+              title={selectedContent.title}
+              description={selectedContent.description}
+              type={selectedContent.type}
+              actions={getQuizActions()}
+            />
+          ) : (
+            <View style={styles.announcementsCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.iconContainer}>
+                  <MessageSquare size={32} color="#E56B8C" />
+                </View>
+                <View style={styles.headerContent}>
+                  <StyledText style={styles.cardTitle}>Announcements</StyledText>
+                  <StyledText style={styles.cardSubtitle}>
+                    Join the discussion with your classmates
+                  </StyledText>
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.openContentButton}
+                onPress={handleOpenContent}
+              >
+                <ExternalLink strokeWidth={1.75} size={20} color="#fff" style={styles.buttonIcon} />
+                <StyledText style={styles.openContentText}>Open Content</StyledText>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Action Buttons - Only show when not viewing content detail */}
+          {!selectedContent && (
+            <View style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={styles.moodleButton}
+                onPress={handleOpenInMoodle}
+              >
+                <ExternalLink size={20} color="#fff" style={styles.buttonIcon} />
+                <StyledText style={styles.moodleButtonText}>Open in Moodle</StyledText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.completeButton}
+                onPress={handleMarkComplete}
+              >
+                <CircleCheckBig strokeWidth={1.75} size={20} color="black" style={styles.buttonIcon} />
+                <StyledText style={styles.completeButtonText}>Mark Complete</StyledText>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      )}
       
-      {/* Sidebar */}
-      <CourseSidebar isVisible={showSidebar} onClose={handleCloseSidebar} />
+      {/* Sidebar - Show for assignments and lectures, hide for quizzes */}
+      {(!selectedContent || selectedContent.type !== 'quiz') && (
+        <CourseSidebar 
+          isVisible={showSidebar} 
+          onClose={handleCloseSidebar}
+          onQuizClick={handleQuizClick}
+          onAssignmentClick={handleAssignmentClick}
+          onLectureClick={handleLectureClick}
+          courseId={course?.id}
+          moodleId={course?.moodleId?.toString()} // Use actual moodleId from course
+        />
+      )}
     </View>
   );
 };

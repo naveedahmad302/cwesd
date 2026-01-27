@@ -65,6 +65,24 @@ export const coursesAPI = {
     apiClient.get('/api/courses'),
 };
 
+// Helper functions for quizzes endpoints
+export const quizzesAPI = {
+  getQuizzes: () =>
+    apiClient.get('/api/quizzes'),
+  getQuizById: (quizId: string) =>
+    apiClient.get(`/api/quizzes/${quizId}`),
+  startAttempt: (quizId: string, studentId: string) =>
+    apiClient.post(`/api/quizzes/${quizId}/attempt`, { studentId }),
+  submitQuiz: (quizId: string, studentId: string, answers: number[]) =>
+    apiClient.put(`/api/quizzes/${quizId}/submit`, { studentId, answers }),
+};
+
+// Helper functions for course sections endpoints
+export const courseSectionsAPI = {
+  getCourseSections: (moodleId: string) =>
+    apiClient.get(`/api/moodle/courses/${moodleId}/sections`),
+};
+
 // Helper functions for messages endpoints
 export const messagesAPI = {
   send: (senderId: string, receiverId: string, text: string, repliedTo?: string) =>

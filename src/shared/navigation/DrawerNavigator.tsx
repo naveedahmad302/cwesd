@@ -12,7 +12,7 @@ import { ChatWithTeacherScreen } from '../../features/student';
 import { CertificatesScreen } from '../../features/student';
 import { AnalyticsScreen } from '../../features/student';
 import { ProfileScreen } from '../../features/common';
-import CourseNavigator from './CourseNavigator';
+import CourseContentScreen from '../../features/student/CourseContentScreen';
 import CourseDetailScreen from '../../features/student/CourseDetailScreen';
 
 // Custom Drawer
@@ -91,7 +91,7 @@ const DrawerNavigator = () => {
       />
       <Drawer.Screen 
         name="CourseContent" 
-        component={CourseNavigator} 
+        component={CourseContentScreen} 
         options={{ 
           drawerLabel: 'Course Content',
           drawerIcon: ({ color, size }) => <BookOpen color={color} size={size}  />

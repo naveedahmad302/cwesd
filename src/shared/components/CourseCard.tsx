@@ -19,6 +19,7 @@ interface CourseCardProps {
     completedDate?: string;
     progress: number;
     headerColor?: string;
+    moodleId?: number; // Add moodleId property
   };
 }
 
