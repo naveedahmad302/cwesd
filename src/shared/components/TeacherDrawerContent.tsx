@@ -2,14 +2,14 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
 import StyledText from './StyledText';
-import { House, BookOpen, Users, FileCheck, HelpCircle, MessageSquare, Video, Calendar as CalendarIcon, User, Settings } from 'lucide-react-native';
+import { House, BookOpen, Users, FileCheck, HelpCircle, MessageSquare, Video, Calendar as CalendarIcon, User } from 'lucide-react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
 
 const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
   const { state } = props;
 
   return (
-    <DrawerContentScrollView {...props}>
+    <DrawerContentScrollView {...props} style={{backgroundColor: '#F0F0FF',borderRadius:16}}>
       <View style={styles.headerContainer}>
         <StyledText style={styles.headerTitle}>WTE Program</StyledText>
         <StyledText style={styles.headerSubtitle}>Teacher Portal</StyledText>
@@ -17,7 +17,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
       <View style={styles.sectionContainer}>
         <StyledText style={styles.sectionTitle}>Navigation</StyledText>
-        {state.routes.filter(route => ['Dashboard', 'Manage Modules', 'Students', 'Grade Assignments', 'Quizzes'].includes(route.name)).map((route) => {
+        {state.routes.filter(route => ['Dashboard', 'Students', 'Grade Assignments', 'Quizzes'].includes(route.name)).map((route) => {
           const IconComponent = getIconComponent(route.name);
           return (
             <DrawerItem 
@@ -71,14 +71,6 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
           style={[styles.drawerItem, props.state.routeNames[props.state.index] === 'Profile' && styles.activeItem]}
           focused={props.state.routeNames[props.state.index] === 'Profile'}
         />
-        <DrawerItem 
-          label="Settings" 
-          onPress={() => props.navigation.navigate('Settings')} 
-          icon={({ size, color }) => <View style={styles.iconContainer}><Settings color={props.state.routeNames[props.state.index] === 'Settings' ? '#000000' : '#000000'} size={size} /></View>} 
-          labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Settings' && styles.activeLabel]}
-          style={[styles.drawerItem, props.state.routeNames[props.state.index] === 'Settings' && styles.activeItem]}
-          focused={props.state.routeNames[props.state.index] === 'Settings'}
-        />
       </View>
     </DrawerContentScrollView>
   );
@@ -88,7 +80,6 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 const getIconComponent = (routeName: string) => {
   const iconMap: { [key: string]: React.ComponentType<any> } = {
     'Dashboard': House,
-    'Manage Modules': BookOpen,
     'Students': Users,
     'Grade Assignments': FileCheck,
     'Quizzes': HelpCircle
@@ -100,7 +91,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#F0F0FF',
     paddingHorizontal: 10,
   },
   headerTitle: {
@@ -114,9 +105,9 @@ const styles = StyleSheet.create({
   drawerLabel: {
     color: '#000000',
     fontFamily: 'FiraCode-Regular',
-    fontSize: 14,
-    paddingVertical: 2,
-    marginVertical: 0,
+    fontSize: 16,
+    // paddingVertical: 2,
+    // marginVertical: 0,
     lineHeight: 16,
   },
   drawerItem: {

@@ -1,6 +1,5 @@
 // Re-export teacher screens
 export { default as TeacherDashboardScreen } from './TeacherDashboardScreen';
-export { default as TeacherModulesScreen } from './TeacherModulesScreen';
 export { default as TeacherStudentsScreen } from './TeacherStudentsScreen';
 export { default as TeacherCalendarScreen } from './TeacherCalendarScreen';
 export { default as TeacherGradesScreen } from './TeacherGradesScreen';

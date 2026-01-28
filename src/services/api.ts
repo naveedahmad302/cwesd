@@ -71,6 +71,8 @@ export const quizzesAPI = {
     apiClient.get('/api/quizzes'),
   getQuizById: (quizId: string) =>
     apiClient.get(`/api/quizzes/${quizId}`),
+  createQuiz: (quizData: any) =>
+    apiClient.post('/api/quizzes', quizData),
   startAttempt: (quizId: string, studentId: string) =>
     apiClient.post(`/api/quizzes/${quizId}/attempt`, { studentId }),
   submitQuiz: (quizId: string, studentId: string, answers: number[]) =>

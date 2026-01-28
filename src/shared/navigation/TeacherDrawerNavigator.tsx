@@ -5,7 +5,6 @@ import { House, BookOpen, Users, ClipboardCheck, FileCheck, HelpCircle, MessageS
 
 // Teacher Screens
 import { TeacherDashboardScreen } from '../../features/teacher';
-import { TeacherModulesScreen } from '../../features/teacher';
 import { TeacherStudentsScreen } from '../../features/teacher';
 import { TeacherCalendarScreen } from '../../features/teacher';
 import { TeacherGradesScreen } from '../../features/teacher';
@@ -86,14 +85,6 @@ const TeacherDrawerNavigator = () => {
         options={{ 
           drawerLabel: 'Dashboard',
           drawerIcon: ({ color, size }) => <House color={color} size={size} />
-        }}
-      />
-      <Drawer.Screen 
-        name="Manage Modules" 
-        component={TeacherModulesScreen} 
-        options={{ 
-          drawerLabel: 'Manage Modules',
-          drawerIcon: ({ color, size }) => <BookOpen color={color} size={size} />
         }}
       />
       <Drawer.Screen 
