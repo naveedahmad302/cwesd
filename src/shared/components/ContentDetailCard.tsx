@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import StyledText from './StyledText';
-import { HelpCircle, FileText, Video, BookOpen, ExternalLink, Check } from 'lucide-react-native';
+import { HelpCircle, FileText, Video, CircleCheckBig, BookOpen, ExternalLink, Check } from 'lucide-react-native';
 
 export interface ContentDetailAction {
   id: string;
@@ -68,9 +68,9 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
           <StyledText style={styles.description}>{description}</StyledText>
         </View>
 
-        {isAssignment ? (
-          <View style={styles.assignmentActionsRow}>
-            {primaryActions.map((action, index) => (
+        {isAssignment && (
+          <View style={styles.actionsContainer}>
+            {primaryActions.filter(action => action.id !== 'open-moodle' && action.id !== 'mark-complete').map((action, index) => (
               <TouchableOpacity
                 key={action.id}
                 style={[
@@ -88,67 +88,49 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
               </TouchableOpacity>
             ))}
           </View>
-        ) : (
-          <>
-            {/* Primary Actions */}
-            <View style={styles.actionsContainer}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  const openAction = actions.find(action => action.id === 'open');
-                  if (openAction) {
-                    openAction.onPress();
-                  }
-                }}
-              >
-                <View style={styles.buttonIcon}>
-                  <ExternalLink size={16} color="#ffffff" />
-                </View>
-                <StyledText style={styles.primaryButtonText}>
-                  Open Content
-                </StyledText>
-              </TouchableOpacity>
-            </View>
-
-            {/* Separator */}
-            <View style={styles.separator} />
-
-            {/* Secondary Actions */}
-            <View style={styles.actionsContainer}>
-              {secondaryActions.map((action, index) => {
-                const getIcon = () => {
-                  if (action.icon && React.isValidElement(action.icon)) {
-                    if (index === 0) {
-                      return React.cloneElement(action.icon as React.ReactElement<any>, { color: '#ffffff' });
-                    } else if (index === 1) {
-                      return React.cloneElement(action.icon as React.ReactElement<any>, { color: '#000000' });
-                    }
-                  }
-                  return action.icon;
-                };
-
-                return (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={[
-                      styles.actionButton,
-                      index === 0 ? styles.secondaryButton : styles.whiteButton
-                    ]}
-                    onPress={action.onPress}
-                  >
-                    {getIcon() && <View style={styles.buttonIcon}>{getIcon()}</View>}
-                    <StyledText style={[
-                      index === 0 ? styles.secondaryButtonText : styles.whiteButtonText
-                    ]}>
-                      {action.title}
-                    </StyledText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
         )}
       </View>
+
+      {/* External Action Buttons - Outside the card */}
+      {isAssignment && (
+        <View style={styles.externalActionsContainer}>
+          {/* Open in Moodle Button */}
+          <TouchableOpacity
+            style={[styles.externalActionButton, styles.primaryExternalButton]}
+            onPress={() => {
+              const openMoodleAction = actions.find(action => action.id === 'open-moodle');
+              if (openMoodleAction) {
+                openMoodleAction.onPress();
+              }
+            }}
+          >
+            <View style={styles.buttonIcon}>
+              <ExternalLink size={16} color="#ffffff" />
+            </View>
+            <StyledText style={styles.primaryButtonText}>
+              Open in Moodle
+            </StyledText>
+          </TouchableOpacity>
+          
+          {/* Mark Complete Button */}
+          <TouchableOpacity
+            style={[styles.externalActionButton, styles.whiteExternalButton]}
+            onPress={() => {
+              const markCompleteAction = actions.find(action => action.id === 'mark-complete');
+              if (markCompleteAction) {
+                markCompleteAction.onPress();
+              }
+            }}
+          >
+            <View style={styles.buttonIcon}>
+              <CircleCheckBig  size={16} color="#111827" />
+            </View>
+            <StyledText style={styles.whiteButtonText}>
+              Mark Complete
+            </StyledText>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -229,6 +211,7 @@ const styles = StyleSheet.create({
   whiteButton: {
     backgroundColor: '#F8F9FA',
     borderWidth: 1,
+    borderColor: '#DFE6E9',
   },
   buttonIcon: {
     marginRight: 10,
@@ -271,6 +254,36 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#E5E7EB',
     marginVertical: 20,
+  },
+  externalActionsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  externalActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    minWidth: '100%',
+  },
+  primaryExternalButton: {
+    backgroundColor: '#E56B8C',
+    shadowColor: '#E56B8C',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  whiteExternalButton: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#DFE6E9',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });
 

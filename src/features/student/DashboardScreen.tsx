@@ -46,6 +46,7 @@ const DashboardScreen = () => {
       completedDate: apiCourse.endDate ? `Ends ${new Date(apiCourse.endDate).toLocaleDateString()}` : 'Ongoing',
       progress: apiCourse.visible ? Math.floor(Math.random() * 80) + 20 : 0,
       headerColor: randomColor,
+      moodleId: apiCourse.moodleId, // Add moodleId property
     };
   };
 

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator, Modal, ScrollView, BackHandler, Pressable } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { userAPI, messagesAPI } from '../../services/api';
 import { realtimeService } from '../../services/realtimeService';
 import axios from 'axios';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { Send } from 'lucide-react-native';
 import { useAuth } from '../auth/AuthContext';
@@ -52,6 +52,7 @@ const MESSAGES: Message[] = [
 
 const ChatWithTeacherScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { user } = useAuth();
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [message, setMessage] = useState('');
@@ -63,6 +64,20 @@ const ChatWithTeacherScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Teacher[]>([]);
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+  const [lastMessages, setLastMessages] = useState<{ [teacherId: string]: { time: string; text: string } }>({});
+
+  // Get user ID at component level
+  const userId = user?.id || (user as any)?._id;
+
+  // Check if teachers are coming from route params
+  useEffect(() => {
+    const routeTeachers = (route.params as any)?.teachers;
+    if (routeTeachers) {
+      setTeachers(routeTeachers);
+      setAllTeachers(routeTeachers);
+      setIsLoading(false);
+    }
+  }, [route.params]);
 
   // Load chat history when teacher is selected and start real-time polling
   useEffect(() => {
@@ -70,7 +85,7 @@ const ChatWithTeacherScreen = () => {
       // Validate that we have valid IDs
       const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
       const teacherId = selectedTeacher?.id;
-      
+
       if (!userId || !teacherId) {
         return;
       }
@@ -79,13 +94,13 @@ const ChatWithTeacherScreen = () => {
         setIsLoadingMessages(true);
         try {
           const response = await messagesAPI.getChat(userId, teacherId);
-          
+
           if (response.status === 200 && response.data) {
             const chatMessages = response.data.data.map((msg: any) => {
               // Extract the actual ID from the senderId object
               const actualSenderId = msg.senderId._id;
               const actualReceiverId = msg.receiverId._id;
-              
+
               const formattedMessage = {
                 id: msg._id,
                 text: msg.text,
@@ -95,7 +110,7 @@ const ChatWithTeacherScreen = () => {
                 edited: msg.edited,
                 repliedTo: msg.repliedTo
               };
-              
+
               return formattedMessage;
             });
             setMessages(chatMessages);
@@ -112,7 +127,7 @@ const ChatWithTeacherScreen = () => {
               return;
             }
           }
-          
+
           // Use mock messages if API fails
           setMessages(MESSAGES);
         } finally {
@@ -131,7 +146,7 @@ const ChatWithTeacherScreen = () => {
           // Extract the actual ID from the senderId object
           const actualSenderId = msg.senderId._id;
           const actualReceiverId = msg.receiverId._id;
-          
+
           const formattedMessage: Message = {
             id: msg._id,
             text: msg.text,
@@ -141,7 +156,7 @@ const ChatWithTeacherScreen = () => {
             edited: msg.edited,
             repliedTo: msg.repliedTo
           };
-          
+
           setMessages(prev => {
             // Check if message already exists
             const exists = prev.some(m => m.id === formattedMessage.id);
@@ -162,6 +177,21 @@ const ChatWithTeacherScreen = () => {
     }
   }, [selectedTeacher, user]);
 
+  // Handle hardware back button
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (selectedTeacher) {
+        setSelectedTeacher(null);
+        navigation.setOptions({ headerShown: true });
+        return true; // Prevent default back behavior
+      }
+      return false; // Allow default back behavior when not in chat
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => backHandler.remove();
+  }, [selectedTeacher, navigation]);
+
   // Hide/show header based on teacher selection
   useFocusEffect(
     React.useCallback(() => {
@@ -173,6 +203,13 @@ const ChatWithTeacherScreen = () => {
     }, [selectedTeacher, navigation])
   );
 
+  // Fetch last messages when teachers are loaded
+  useEffect(() => {
+    if (teachers.length > 0 && Object.keys(lastMessages).length === 0) {
+      fetchLastMessagesForTeachers(teachers);
+    }
+  }, [teachers]);
+
   // Fetch teachers from API
   useEffect(() => {
     const fetchTeachers = async () => {
@@ -180,20 +217,23 @@ const ChatWithTeacherScreen = () => {
         const response = await userAPI.getTeachers();
         // Handle the nested response structure
         const teachersData = response.data.data || [];
-        
+
         // Transform API response to match our Teacher interface
         const transformedTeachers = teachersData.map((teacher: TeacherApiResponse) => ({
           id: teacher._id,
           name: teacher.name,
           subject: teacher.qualification || 'No subject specified',
-          avatar: teacher.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s',
+          avatar: teacher.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI1FHK3BJPb3bw1rg&s',
           online: Math.random() > 0.5, // Random online status for demo
           email: teacher.email,
           role: teacher.role
         }));
-        
+
         setTeachers(transformedTeachers);
         setAllTeachers(transformedTeachers); // Set all teachers for search
+
+        // Fetch last messages for each teacher
+        await fetchLastMessagesForTeachers(transformedTeachers);
       } catch (error) {
         if (axios.isAxiosError(error)) {
           // Handle axios error
@@ -206,17 +246,53 @@ const ChatWithTeacherScreen = () => {
     fetchTeachers();
   }, []);
 
+  // Function to fetch last messages for all teachers
+  const fetchLastMessagesForTeachers = async (teachersList: Teacher[]) => {
+    if (!userId) {
+      return;
+    }
+
+    const lastMessagesData: { [teacherId: string]: { time: string; text: string } } = {};
+
+    for (const teacher of teachersList) {
+      try {
+        const response = await messagesAPI.getChat(userId, teacher.id);
+        
+        if (response.status === 200 && response.data) {
+          if (response.data.data && response.data.data.length > 0) {
+            const messages = response.data.data;
+            const lastMessage = messages[messages.length - 1]; // Get the last message
+
+            lastMessagesData[teacher.id] = {
+              time: new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              text: lastMessage.text.length > 30 ? lastMessage.text.substring(0, 30) + '...' : lastMessage.text
+            };
+          } else {
+            // Don't add anything to lastMessagesData if no chat history exists
+            // This way the UI will show nothing for teachers with no chat history
+          }
+        } else {
+          // Don't add anything for bad responses either
+        }
+      } catch (error) {
+        // Don't add anything for errors either
+      }
+    }
+
+    setLastMessages(lastMessagesData);
+  };
+
   const handleSend = useCallback(async () => {
     if (message.trim() === '' || !selectedTeacher || !user) return;
-    
+
     // Validate user IDs before sending
     const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
     const teacherId = selectedTeacher?.id;
-    
+
     if (!userId || !teacherId) {
       return;
     }
-    
+
     try {
       await realtimeService.sendMessage(
         userId,
@@ -225,14 +301,6 @@ const ChatWithTeacherScreen = () => {
       );
       setMessage('');
     } catch (error: any) {
-      // Log more details about the error
-      if (error.response) {
-        // If we get a 500 error, show a fallback message locally
-        if (error.response.status === 500) {
-          // Server error - message not sent, showing locally only
-        }
-      }
-      
       // Fallback to local message if API fails
       const fallbackMessage: Message = {
         id: Date.now().toString(),
@@ -266,8 +334,11 @@ const ChatWithTeacherScreen = () => {
     setSearchResults([]);
   };
 
-  const renderTeacherItem: ListRenderItem<Teacher> = ({ item }) => (
-    <TouchableOpacity 
+  const renderTeacherItem: ListRenderItem<Teacher> = ({ item }) => {
+    const hasMessages = lastMessages[item.id] && lastMessages[item.id].time !== undefined;
+    
+    return (
+    <TouchableOpacity
       style={[styles.teacherItem, selectedTeacher?.id === item.id && styles.selectedTeacher]}
       onPress={() => setSelectedTeacher(item)}
     >
@@ -277,14 +348,23 @@ const ChatWithTeacherScreen = () => {
       </View>
       <View style={styles.teacherInfo}>
         <StyledText style={styles.teacherName}>{item.name}</StyledText>
-        <StyledText style={styles.teacherSubject}>{item.subject}</StyledText>
+        {hasMessages && (
+          <StyledText style={styles.teacherLastText}>{lastMessages[item.id]?.text}</StyledText>
+        )}
+        <View style={styles.teacherRoleContainer}>
+          {hasMessages && (
+          <StyledText style={styles.teacherRole}>{item.role}</StyledText>
+          )}
+          <StyledText style={styles.teacherTime}>{lastMessages[item.id]?.time}</StyledText>
+        </View>
       </View>
-      <Icon name="chevron-right" size={24} color="#666" />
+      {/* <Icon name="chevron-right" size={24} color="#666" /> */}
     </TouchableOpacity>
-  );
+    );
+  };
 
   const renderSearchTeacherItem: ListRenderItem<Teacher> = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.searchTeacherItem}
       onPress={() => handleSelectTeacher(item)}
     >
@@ -304,16 +384,16 @@ const ChatWithTeacherScreen = () => {
 
   const renderMessage: ListRenderItem<Message> = ({ item }) => {
     const isMyMessage = item.sender === 'me';
-    
+
     return (
       <View style={[
         styles.messageContainer,
         isMyMessage ? styles.myMessageContainer : styles.teacherMessageContainer
       ]}>
         {!isMyMessage && (
-          <Image 
-            source={{ uri: selectedTeacher?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
-            style={styles.messageAvatar} 
+          <Image
+            source={{ uri: selectedTeacher?.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }}
+            style={styles.messageAvatar}
           />
         )}
         <View style={styles.messageContentWrapper}>
@@ -337,9 +417,9 @@ const ChatWithTeacherScreen = () => {
           ]}>{item.time}</StyledText>
         </View>
         {isMyMessage && (
-          <Image 
-            source={{ uri: user?.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }} 
-            style={styles.messageAvatar} 
+          <Image
+            source={{ uri: user?.picture || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s' }}
+            style={styles.messageAvatar}
           />
         )}
       </View>
@@ -352,8 +432,8 @@ const ChatWithTeacherScreen = () => {
         <View style={styles.teacherListContainer}>
           <View style={styles.header}>
             {/* <StyledText style={styles.headerTitle}>Select a Teacher</StyledText> */}
-            <TouchableOpacity 
-              style={styles.plusButton} 
+            <TouchableOpacity
+              style={styles.plusButton}
               onPress={() => setShowSearchModal(true)}
             >
               <Icon name="plus" size={24} color="black" />
@@ -372,7 +452,7 @@ const ChatWithTeacherScreen = () => {
               contentContainerStyle={styles.teacherList}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Icon name="account-search" size={48} color="#ccc" />
+                  {/* <Icon name="account-search" size={48} color="#ccc" /> */}
                   <StyledText style={styles.emptyText}>No teachers available</StyledText>
                 </View>
               }
@@ -382,21 +462,42 @@ const ChatWithTeacherScreen = () => {
       ) : (
         <View style={styles.chatContainer}>
           <View style={styles.chatHeader}>
-            <TouchableOpacity onPress={() => setSelectedTeacher(null)} style={styles.backButton}>
+            <Pressable
+              onPress={() => {
+                // console.log('Arrow back button pressed');
+                setSelectedTeacher(null);
+                navigation.setOptions({ headerShown: true });
+              }}
+              onPressIn={() => console.log('Arrow press in')}
+              onPressOut={() => console.log('Arrow press out')}
+              style={({ pressed }) => [
+                styles.backButton,
+                { backgroundColor: pressed ? '#f0f0f0' : 'transparent' }
+              ]}
+            >
               <Icon name="arrow-left" size={24} color="#333" />
-            </TouchableOpacity>
-            <Image source={{ uri: selectedTeacher.avatar }} style={styles.chatHeaderAvatar} />
-            <View>
-              <StyledText style={styles.chatHeaderName}>{selectedTeacher.name}</StyledText>
-              <View style={styles.statusContainer}>
-                <View style={[styles.statusDot, { backgroundColor: selectedTeacher.online ? '#4CAF50' : '#9E9E9E' }]} />
-                <StyledText style={styles.statusText}>
-                  {selectedTeacher.online ? 'Online' : 'Offline'}
-                </StyledText>
+            </Pressable>
+            <TouchableOpacity
+              onPress={() => {
+                console.log('Teacher header pressed');
+                setSelectedTeacher(null);
+                navigation.setOptions({ headerShown: true });
+              }}
+              style={styles.teacherHeaderTouchable}
+            >
+              <Image source={{ uri: selectedTeacher.avatar }} style={styles.chatHeaderAvatar} />
+              <View>
+                <StyledText style={styles.chatHeaderName}>{selectedTeacher.name}</StyledText>
+                <View style={styles.statusContainer}>
+                  <View style={[styles.statusDot, { backgroundColor: selectedTeacher.online ? '#4CAF50' : '#9E9E9E' }]} />
+                  <StyledText style={styles.statusText}>
+                    {selectedTeacher.online ? 'Online' : 'Offline'}
+                  </StyledText>
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
           </View>
-          
+
           <FlatList
             data={messages}
             keyExtractor={item => item.id}
@@ -410,7 +511,7 @@ const ChatWithTeacherScreen = () => {
               </View>
             ) : null}
           />
-          
+
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
@@ -422,12 +523,12 @@ const ChatWithTeacherScreen = () => {
             />
             <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
               <Send size={24} color="#fff" />
-              
+
             </TouchableOpacity>
           </View>
         </View>
       )}
-      
+
       {/* Search Modal */}
       <Modal
         visible={showSearchModal}
@@ -443,7 +544,7 @@ const ChatWithTeacherScreen = () => {
           <View style={styles.modalHeader}>
             <View style={styles.placeholder} />
             <StyledText style={styles.modalTitle}>Message a Teachers</StyledText>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 setShowSearchModal(false);
                 setSearchQuery('');
@@ -454,7 +555,7 @@ const ChatWithTeacherScreen = () => {
               <Icon name="close" size={24} color="#333" />
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.searchSection}>
             <StyledText style={styles.searchSectionTitle}>Select a teacher to start a new conversation.</StyledText>
             <View style={styles.searchInputContainer}>
@@ -469,7 +570,7 @@ const ChatWithTeacherScreen = () => {
               />
             </View>
           </View>
-          
+
           <View style={styles.resultsSection}>
             {searchQuery.trim() === '' ? (
               // Show all teachers when no search query
@@ -521,6 +622,7 @@ const ChatWithTeacherScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 25,
     backgroundColor: '#F9FAFB',
   },
   // Teacher List Styles
@@ -529,7 +631,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 16,
-    borderBottomWidth: 1,
+    // borderBottomWidth: 1,
     borderBottomColor: '#eee',
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -547,7 +649,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    borderColor: '#ddd',
     marginBottom: 8,
     backgroundColor: '#f9f9f9',
   },
@@ -597,6 +701,23 @@ const styles = StyleSheet.create({
     color: 'black',
     marginTop: 1,
   },
+  teacherRoleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  teacherTime: {
+    fontSize: 11,
+    color: 'black',
+    marginTop: 2,
+  },
+  teacherLastText: {
+    fontSize: 12,
+    color: 'black',
+    marginTop: 2,
+    // fontStyle: 'italic',
+  },
   // Chat Styles
   chatContainer: {
     flex: 1,
@@ -610,6 +731,15 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 16,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teacherHeaderTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   chatHeaderAvatar: {
     width: 40,
@@ -639,7 +769,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     paddingHorizontal: 2,
-    padding:16,
+    padding: 16,
     paddingBottom: 80,
   },
   loadingMessagesContainer: {
@@ -689,7 +819,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'left',
   },
-  
+
   messageBubble: {
     maxWidth: '80%',
     padding: 12,
@@ -728,7 +858,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     padding: 20,
-    paddingBottom:30,
+    paddingBottom: 30,
     // paddingTop:30,
     // paddingVertical:0,
     borderTopWidth: 1,
@@ -742,7 +872,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    
+
     borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 16,
@@ -792,8 +922,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth:1,
-    borderColor:'#ddddddff'
+    borderWidth: 1,
+    borderColor: '#ddddddff'
   },
   modalContainer: {
     flex: 1,
@@ -804,7 +934,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    
+
     // borderBottomWidth: 1,
     // borderBottomColor: '#eee',
   },

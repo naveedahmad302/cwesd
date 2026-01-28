@@ -15,6 +15,22 @@ const CourseDetailScreen: React.FC = () => {
   console.log('CourseDetailScreen - route.params:', route.params);
   console.log('CourseDetailScreen - course:', course);
   
+  // Add error handling for missing course data
+  if (!course) {
+    console.error('CourseDetailScreen: No course data provided');
+    return (
+      <View style={styles.errorContainer}>
+        <StyledText style={styles.errorText}>Course data not found</StyledText>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <StyledText style={styles.backButtonText}>Go Back</StyledText>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  
   const [showSidebar, setShowSidebar] = useState(false);
   const [selectedContent, setSelectedContent] = useState<{
     type: 'quiz' | 'assignment' | 'lecture';
@@ -103,97 +119,79 @@ const CourseDetailScreen: React.FC = () => {
   };
 
   const getQuizActions = (): ContentDetailAction[] => {
-    if (selectedContent?.type === 'quiz') {
-      return [
-        {
-          id: 'open',
-          title: 'Open Content',
-          type: 'primary',
-          onPress: handleOpenContent
-        },
-        {
-          id: 'submit',
-          title: 'Submit Quiz',
-          type: 'primary',
-          onPress: () => console.log('Submit quiz')
-        },
-        {
-          id: 'moodle',
-          title: 'Open in Moodle',
-          type: 'secondary',
-          onPress: handleOpenInMoodle,
-          icon: <ExternalLink size={16} color="#FF6B6B" />
-        },
-        {
-          id: 'complete',
-          title: 'Mark Complete',
-          type: 'secondary',
-          onPress: handleMarkComplete,
-          icon: <CircleCheckBig size={16} color="#FF6B6B" />
-        }
-      ];
-    } else if (selectedContent?.type === 'assignment') {
-      return [
-        {
-          id: 'open',
-          title: 'Open Content',
-          type: 'primary',
-          onPress: handleOpenContent,
-          icon: <ExternalLink size={16} color="#ffffff" />
-        },
-        {
-          id: 'submit',
-          title: 'Submit Assignment',
-          type: 'primary',
-          onPress: () => console.log('Submit assignment'),
-          icon: <MessageSquare size={16} color="#111827" />
-        },
-        {
-          id: 'moodle',
-          title: 'Open in Moodle',
-          type: 'secondary',
-          onPress: handleOpenInMoodle,
-          icon: <ExternalLink size={16} color="#FF6B6B" />
-        },
-        {
-          id: 'complete',
-          title: 'Mark Complete',
-          type: 'secondary',
-          onPress: handleMarkComplete,
-          icon: <CircleCheckBig size={16} color="#FF6B6B" />
-        }
-      ];
-    } else if (selectedContent?.type === 'lecture') {
-      return [
-        {
-          id: 'open',
-          title: 'Open Content',
-          type: 'primary',
-          onPress: handleOpenContent
-        },
-        {
-          id: 'download',
-          title: 'Download',
-          type: 'primary',
-          onPress: () => console.log('Download lecture')
-        },
-        {
-          id: 'moodle',
-          title: 'Open in Moodle',
-          type: 'secondary',
-          onPress: handleOpenInMoodle,
-          icon: <ExternalLink size={16} color="#FF6B6B" />
-        },
-        {
-          id: 'complete',
-          title: 'Mark Complete',
-          type: 'secondary',
-          onPress: handleMarkComplete,
-          icon: <CircleCheckBig size={16} color="#FF6B6B" />
-        }
-      ];
+    const baseActions: ContentDetailAction[] = [
+      {
+        id: 'open-moodle',
+        title: 'Open in Moodle',
+        type: 'primary',
+        onPress: handleOpenInMoodle,
+        icon: <ExternalLink size={16} color="#ffffff" />
+      },
+      {
+        id: 'mark-complete',
+        title: 'Mark Complete',
+        type: 'primary',
+        onPress: handleMarkComplete,
+        icon: <CircleCheckBig size={16} color="#111827" />
+      }
+    ];
+
+    if (!selectedContent) return baseActions;
+
+    switch (selectedContent.type) {
+      case 'quiz':
+        return [
+          {
+            id: 'open',
+            title: 'Open Content',
+            type: 'primary',
+            onPress: handleOpenContent
+          },
+          {
+            id: 'submit',
+            title: 'Submit Quiz',
+            type: 'primary',
+            onPress: () => console.log('Submit quiz')
+          },
+          ...baseActions
+        ];
+      case 'assignment':
+        return [
+          {
+            id: 'open',
+            title: 'Open Content',
+            type: 'primary',
+            onPress: handleOpenContent,
+            icon: <ExternalLink size={16} color="#ffffff" />
+          },
+          {
+            id: 'submit',
+            title: 'Submit Assignment',
+            type: 'primary',
+            onPress: () => console.log('Submit assignment'),
+            icon: <MessageSquare size={16} color="#111827" />
+          },
+          ...baseActions
+        ];
+      case 'lecture':
+        return [
+          {
+            id: 'open',
+            title: 'Open Content',
+            type: 'primary',
+            onPress: handleOpenContent
+          },
+          {
+            id: 'download',
+            title: 'Download',
+            type: 'primary',
+            onPress: () => console.log('Download lecture')
+          },
+          ...baseActions
+        ];
+      default:
+        return baseActions;
     }
-    return [];
   };
 
   return (
@@ -458,6 +456,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'black',
     marginLeft: 10,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  backButton: {
+    backgroundColor: '#E56B8C',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

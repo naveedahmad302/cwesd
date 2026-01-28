@@ -7,11 +7,9 @@ import { AppNavigator } from './src/shared/navigation';
 import { Toast } from 'react-native-toast-message/lib/src/Toast';
 
 
-
 const App = () => {
 
   return (
-
     <AuthProvider>
 
       <AppNavigator />

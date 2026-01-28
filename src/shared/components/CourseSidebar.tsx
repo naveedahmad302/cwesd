@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import StyledText from './StyledText';
 import { X, BookOpen, FileText, Video, Users, MessageSquare } from 'lucide-react-native';
 import { quizzesAPI, courseSectionsAPI } from '../../services/api';
@@ -92,6 +92,10 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
   const [lectures, setLectures] = useState<Assignment[]>([]);
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+  
+  // Animation refs
+  const slideAnim = useRef(new Animated.Value(-400)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const isQuizSubmitted = (quiz: Quiz) => {
     // Check if the current user has submitted this quiz
@@ -123,8 +127,35 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
       } else {
         console.log('No courseId provided');
       }
+      // Animate in
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Animate out
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -400,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [isVisible, courseId]);
+  }, [isVisible, courseId, slideAnim, fadeAnim]);
 
   const fetchQuizzes = async () => {
     if (!courseId) return;
@@ -271,7 +302,15 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
 
   return (
     <View style={styles.overlay}>
-      <View style={styles.sidebar}>
+      <Animated.View 
+        style={[
+          styles.sidebar,
+          {
+            transform: [{ translateX: slideAnim }],
+            opacity: fadeAnim,
+          }
+        ]}
+      >
         {/* Header */}
         <View style={styles.sidebarHeader}>
           <StyledText style={styles.sidebarTitle}>Course Content</StyledText>
@@ -400,7 +439,7 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
             </View>
           </View>
         </ScrollView>
-      </View>
+      </Animated.View>
     </View>
   );
 };
@@ -419,15 +458,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0,
-    width: 350,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
+    width: 400,
+    height: '100%',
+    backgroundColor: '#F9FAFB',
+    // shadowColor: '#000',
+    // shadowOffset: { width: 2, height: 0 },
+    // shadowOpacity: 0.25,
+    // shadowRadius: 10,
+    // elevation: 10,
     zIndex: 9999,
   },
   sidebarHeader: {

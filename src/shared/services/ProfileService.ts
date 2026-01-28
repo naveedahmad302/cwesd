@@ -2,6 +2,11 @@ export interface Profile {
   id: string;
   name: string;
   image: string;
+  _id?: string;
+  picture?: string;
+  email?: string;
+  role?: string;
+  qualification?: string;
 }
 
 export abstract class ProfileService {
