@@ -1,63 +1,99 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import StyledText from '../../shared/components/StyledText';
+import React, { useState } from 'react';
+import { Users, Book, Video, FileText, GraduationCap } from 'lucide-react-native';
+import Calendar from '../../shared/components/Calendar';
+import AddEventModal from './components/AddEventModal';
+
+interface EventData {
+  title: string;
+  eventType: string;
+  startTime: string;
+  endTime: string;
+  description: string;
+  module: string;
+  location: string;
+}
 
 const TeacherCalendarScreen = () => {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [events, setEvents] = useState([
+    {
+      id: '1',
+      title: 'Business Strategy Lecture',
+      date: 'Tomorrow',
+      time: '9:00 AM - 10:30 AM',
+      icon: GraduationCap,
+      color: '#E56B8C'
+    },
+    {
+      id: '2',
+      title: 'Student Project Reviews',
+      date: 'Jan 27',
+      time: '2:00 PM - 4:00 PM',
+      icon: Users,
+      color: '#8B5CF6'
+    },
+    {
+      id: '3',
+      title: 'Faculty Meeting',
+      date: 'Jan 29',
+      time: '3:00 PM - 4:30 PM',
+      icon: Users,
+      color: '#F97316'
+    },
+    {
+      id: '4',
+      title: 'Guest Speaker Session',
+      date: 'Jan 31',
+      time: '1:00 PM - 2:30 PM',
+      icon: Video,
+      color: '#10B981'
+    },
+    {
+      id: '5',
+      title: 'Grade Submissions Due',
+      date: 'Feb 2, 2026',
+      time: '5:00 PM',
+      icon: FileText,
+      color: '#F97316'
+    }
+  ]);
+
+  const handleAddEvent = () => {
+    setShowAddModal(true);
+  };
+
+  const handleAddEventSubmit = (eventData: EventData) => {
+    const newEvent = {
+      id: Date.now().toString(),
+      title: eventData.title,
+      date: 'Today',
+      time: `${eventData.startTime} - ${eventData.endTime}`,
+      icon: GraduationCap,
+      color: '#E56B8C'
+    };
+    setEvents([newEvent, ...events]);
+  };
+
+  const handleCloseModal = () => {
+    setShowAddModal(false);
+  };
+
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <StyledText style={styles.title}>Calendar</StyledText>
-        <StyledText style={styles.subtitle}>Manage your schedule</StyledText>
-        
-        <View style={styles.card}>
-          <StyledText style={styles.cardTitle}>Upcoming Classes</StyledText>
-          <StyledText style={styles.cardText}>View your scheduled classes and events</StyledText>
-        </View>
-      </ScrollView>
-    </View>
+    <>
+      <Calendar
+        events={events}
+        userType="teacher"
+        title="Teacher Calendar"
+        subtitle="Manage your teaching schedule and appointments"
+        onAddEvent={handleAddEvent}
+      />
+      <AddEventModal
+        visible={showAddModal}
+        onClose={handleCloseModal}
+        onAddEvent={handleAddEventSubmit}
+      />
+    </>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  content: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 20,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  cardText: {
-    fontSize: 14,
-    color: '#666',
-  },
-});
 
 export default TeacherCalendarScreen;

@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     width: '90%',
-    maxHeight: '95%',
+    maxHeight: '98%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    maxHeight: 500,
+    maxHeight: 650,
   },
   summarySection: {
     // backgroundColor: '#f8f9fa',
@@ -671,22 +671,22 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   footer: {
-    flexDirection: 'column',
-    gap: 12,
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    // gap: 7,
+    paddingBottom: 20,
+    // borderTopWidth: 1,
+    // borderTopColor: '#e5e7eb',
   },
   footerButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
+    gap: 10,
+    paddingVertical: 8,
     borderRadius: 8,
+    marginBottom:10,
   },
   cancelButton: {
+    
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',

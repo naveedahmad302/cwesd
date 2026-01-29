@@ -1,19 +1,78 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
+import WebinarCard from '../../shared/components/WebinarCard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+interface Webinar {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  participants: number;
+  status: 'upcoming' | 'live' | 'completed';
+}
+
 const TeacherWebinarScreen = () => {
+  // Mock data - replace with actual data from your API
+  const webinars: Webinar[] = [
+    {
+      id: '1',
+      title: 'Market Analysis Workshop',
+      date: 'Jan 16, 2026',
+      time: '10:00 AM',
+      participants: 28,
+      status: 'upcoming',
+    },
+    {
+      id: '2',
+      title: 'Advanced Trading Strategies',
+      date: 'Jan 18, 2026',
+      time: '2:00 PM',
+      participants: 45,
+      status: 'upcoming',
+    },
+    {
+      id: '3',
+      title: 'Risk Management Basics',
+      date: 'Jan 20, 2026',
+      time: '11:00 AM',
+      participants: 32,
+      status: 'upcoming',
+    },
+  ];
+
+  const handleStartWebinar = (webinarId: string) => {
+    console.log('Starting webinar:', webinarId);
+    // Implement webinar start logic here
+  };
+
+  const handleScheduleWebinar = () => {
+    console.log('Schedule new webinar');
+    // Implement schedule webinar logic here
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <StyledText style={styles.title}>Schedule Webinar</StyledText>
-        <StyledText style={styles.subtitle}>Schedule and manage webinars</StyledText>
+        <TouchableOpacity style={styles.scheduleButton} onPress={handleScheduleWebinar}>
+          <Icon name="plus" size={20} color="#fff" />
+          <StyledText style={styles.scheduleButtonText}>Schedule Webinar</StyledText>
+        </TouchableOpacity>
         
-        <View style={styles.card}>
-          <StyledText style={styles.cardTitle}>Upcoming Webinars</StyledText>
-          <StyledText style={styles.cardText}>View and schedule upcoming webinars for your courses</StyledText>
-        </View>
+        {/* <StyledText style={styles.sectionTitle}>Upcoming Webinars</StyledText> */}
+        
+        {webinars.map((webinar) => (
+          <WebinarCard
+            key={webinar.id}
+            title={webinar.title}
+            date={webinar.date}
+            time={webinar.time}
+            participants={webinar.participants}
+            status={webinar.status}
+            onStartWebinar={() => handleStartWebinar(webinar.id)}
+          />
+        ))}
       </ScrollView>
     </View>
   );
@@ -27,37 +86,29 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+  scheduleButton: {
+    marginTop: 30,
+    backgroundColor: '#E56B8C',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    // justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 24,
+    gap: 12,
+    width:230
   },
-  subtitle: {
+  scheduleButtonText: {
+    color: '#fff',
     fontSize: 16,
-    color: '#666',
-    marginBottom: 20,
+    fontWeight: '600',
   },
-  card: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardTitle: {
-    fontSize: 18,
+  sectionTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  cardText: {
-    fontSize: 14,
-    color: '#666',
+    color: '#1F2937',
+    marginBottom: 16,
   },
 });
 

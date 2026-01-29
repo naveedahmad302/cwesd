@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator, Modal, ScrollView, BackHandler, Pressable } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -9,6 +9,7 @@ import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { Send } from 'lucide-react-native';
 import { useAuth } from '../auth/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Type definitions
 interface Teacher {
@@ -19,6 +20,7 @@ interface Teacher {
   online: boolean;
   email: string;
   role: string;
+  isRecentChat?: boolean;
 }
 
 // API response type
@@ -65,9 +67,67 @@ const ChatWithTeacherScreen = () => {
   const [searchResults, setSearchResults] = useState<Teacher[]>([]);
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [lastMessages, setLastMessages] = useState<{ [teacherId: string]: { time: string; text: string } }>({});
+  const [persistentRecentChats, setPersistentRecentChats] = useState<string[]>([]); // For permanent storage
+  const flatListRef = React.useRef<FlatList>(null);
 
   // Get user ID at component level
   const userId = user?.id || (user as any)?._id;
+
+  // Load persistent recent chats from AsyncStorage on mount
+  useEffect(() => {
+    const loadPersistentRecentChats = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('persistentRecentChats_student');
+        console.log('ChatWithTeacherScreen: Loaded from AsyncStorage:', stored);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          console.log('ChatWithTeacherScreen: Parsed recent chats:', parsed);
+          setPersistentRecentChats(parsed);
+        }
+      } catch (error) {
+        console.error('ChatWithTeacherScreen: Error loading recent chats:', error);
+      }
+    };
+    loadPersistentRecentChats();
+  }, []);
+
+  // Save recent chat to AsyncStorage when message is sent
+  const saveRecentChatToStorage = async (teacherId: string) => {
+    try {
+      console.log('ChatWithTeacherScreen: Saving recent chat for teacher:', teacherId);
+      const updated = [teacherId, ...persistentRecentChats.filter(id => id !== teacherId)].slice(0, 10);
+      console.log('ChatWithTeacherScreen: Updated recent chats:', updated);
+      setPersistentRecentChats(updated);
+      await AsyncStorage.setItem('persistentRecentChats_student', JSON.stringify(updated));
+      console.log('ChatWithTeacherScreen: Saved to AsyncStorage successfully');
+    } catch (error) {
+      console.error('ChatWithTeacherScreen: Error saving recent chat:', error);
+    }
+  };
+
+  // Function to get recent chat users and add them to the top (using persistent storage)
+  const getRecentChatUsers = useCallback(() => {
+    if (!persistentRecentChats || persistentRecentChats.length === 0) {
+      return [];
+    }
+    
+    return persistentRecentChats.map(teacherId => {
+      const teacher = allTeachers.find(t => t.id === teacherId);
+      return teacher ? { ...teacher, isRecentChat: true } : null;
+    }).filter(Boolean);
+  }, [persistentRecentChats, allTeachers]);
+
+  // Function to get non-recent users
+  const getNonRecentUsers = useCallback(() => {
+    return teachers.filter(teacher => !persistentRecentChats.includes(teacher.id));
+  }, [teachers, persistentRecentChats]);
+
+  // Combine recent and non-recent users
+  const sortedTeachers = useMemo(() => {
+    const recent = getRecentChatUsers();
+    const nonRecent = getNonRecentUsers();
+    return [...recent, ...nonRecent].filter(Boolean) as Teacher[];
+  }, [getRecentChatUsers, getNonRecentUsers]);
 
   // Check if teachers are coming from route params
   useEffect(() => {
@@ -85,6 +145,13 @@ const ChatWithTeacherScreen = () => {
       // Validate that we have valid IDs
       const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
       const teacherId = selectedTeacher?.id;
+      
+      console.log('Load Chat History Debug:', {
+        userId,
+        teacherId,
+        userObject: user,
+        selectedTeacher
+      });
 
       if (!userId || !teacherId) {
         return;
@@ -100,20 +167,67 @@ const ChatWithTeacherScreen = () => {
               // Extract the actual ID from the senderId object
               const actualSenderId = msg.senderId._id;
               const actualReceiverId = msg.receiverId._id;
+              
+              console.log('Message Debug:', {
+                actualSenderId,
+                actualReceiverId,
+                userId,
+                teacherId,
+                isMe: actualSenderId === userId,
+                msgText: msg.text
+              });
+
+              // WORKAROUND: Backend issue - all messages have same senderId. Use message timing to determine actual sender
+              // This fixes the issue where teacher messages are stored with student's senderId
+              let isActuallyMe = actualSenderId === userId;
+              
+              // Check if this is the backend bug case where both sender and receiver have same ID
+              // Only apply the workaround if senderId === receiverId === userId (clearly a backend bug)
+              if (actualSenderId === userId && actualReceiverId === userId) {
+                // This is the backend bug - all messages have same IDs
+                // Use a simple pattern: every other message is from teacher
+                const messageIndex = response.data.data.indexOf(msg);
+                isActuallyMe = messageIndex % 2 === 0; // Even indices = me, odd = teacher
+                
+                console.log('WORKAROUND: Backend bug detected - using index-based sender detection:', {
+                  messageText: msg.text,
+                  messageIndex,
+                  isActuallyMe
+                });
+              } else if (actualSenderId === teacherId) {
+                // This is a correctly formatted teacher message
+                isActuallyMe = false;
+                console.log('Correct teacher message detected:', {
+                  messageText: msg.text,
+                  actualSenderId,
+                  teacherId
+                });
+              }
 
               const formattedMessage = {
                 id: msg._id,
                 text: msg.text,
-                sender: actualSenderId === userId ? 'me' : 'teacher',
+                sender: isActuallyMe ? 'me' : 'teacher',
                 time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 read: msg.read,
                 edited: msg.edited,
                 repliedTo: msg.repliedTo
               };
+              
+              console.log('Formatted Message:', {
+                id: formattedMessage.id,
+                text: formattedMessage.text,
+                sender: formattedMessage.sender,
+                isActuallyMe
+              });
 
               return formattedMessage;
             });
             setMessages(chatMessages);
+            // Auto-scroll to bottom after loading messages
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
           } else {
             setMessages(MESSAGES);
           }
@@ -146,11 +260,49 @@ const ChatWithTeacherScreen = () => {
           // Extract the actual ID from the senderId object
           const actualSenderId = msg.senderId._id;
           const actualReceiverId = msg.receiverId._id;
+          
+          console.log('New Message Debug:', {
+            actualSenderId,
+            actualReceiverId,
+            userId,
+            teacherId,
+            isMe: actualSenderId === userId
+          });
+
+          // Apply the same logic as in chat history loading
+          let isActuallyMe = actualSenderId === userId;
+          
+          // Check if this is the backend bug case where both sender and receiver have same ID
+          // Only apply the workaround if senderId === receiverId === userId (clearly a backend bug)
+          if (actualSenderId === userId && actualReceiverId === userId) {
+            // For real-time messages with backend bug, we need to determine actual sender
+            // Since this is a new message, we can assume it's from the other party if the last message was from us
+            const currentMessages = messages; // Use current messages state
+            if (currentMessages.length > 0) {
+              const lastMessage = currentMessages[currentMessages.length - 1];
+              isActuallyMe = lastMessage.sender === 'teacher'; // If last was teacher, this is me, and vice versa
+            } else {
+              isActuallyMe = true; // Default to me if no history
+            }
+            console.log('WORKAROUND: Real-time backend bug detected - using last message to determine sender:', {
+              messageText: msg.text,
+              lastMessageSender: currentMessages.length > 0 ? currentMessages[currentMessages.length - 1].sender : 'none',
+              isActuallyMe
+            });
+          } else if (actualSenderId === teacherId) {
+            // This is a correctly formatted teacher message
+            isActuallyMe = false;
+            console.log('Correct teacher message detected in real-time:', {
+              messageText: msg.text,
+              actualSenderId,
+              teacherId
+            });
+          }
 
           const formattedMessage: Message = {
             id: msg._id,
             text: msg.text,
-            sender: actualSenderId === userId ? 'me' : 'teacher',
+            sender: isActuallyMe ? 'me' : 'teacher',
             time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             read: msg.read,
             edited: msg.edited,
@@ -161,7 +313,22 @@ const ChatWithTeacherScreen = () => {
             // Check if message already exists
             const exists = prev.some(m => m.id === formattedMessage.id);
             if (!exists) {
-              return [...prev, formattedMessage];
+              const updated = [...prev, formattedMessage];
+              console.log('Messages State Update Debug:', {
+                previousCount: prev.length,
+                newCount: updated.length,
+                newMessage: {
+                  id: formattedMessage.id,
+                  text: formattedMessage.text,
+                  sender: formattedMessage.sender
+                },
+                allMessages: updated.map(m => ({ id: m.id, text: m.text, sender: m.sender }))
+              });
+              // Auto-scroll to bottom on new message
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 50);
+              return updated;
             }
             return prev;
           });
@@ -286,12 +453,19 @@ const ChatWithTeacherScreen = () => {
     if (message.trim() === '' || !selectedTeacher || !user) return;
 
     // Validate user IDs before sending
-    const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
-    const teacherId = selectedTeacher?.id;
+      const userId = user?.id || (user as any)?._id; // Fallback to _id if id is missing
+      const teacherId = selectedTeacher?.id;
 
-    if (!userId || !teacherId) {
-      return;
-    }
+      console.log('Send Message Debug:', {
+        userId,
+        teacherId,
+        userObject: user,
+        selectedTeacher
+      });
+
+      if (!userId || !teacherId) {
+        return;
+      }
 
     try {
       await realtimeService.sendMessage(
@@ -299,9 +473,30 @@ const ChatWithTeacherScreen = () => {
         teacherId,
         message.trim()
       );
+      
+      // Only add to recent chat when message is successfully sent
+      saveRecentChatToStorage(teacherId);
+      
+      // Update lastMessages immediately after sending
+      const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const messageText = message.trim().length > 30 ? message.trim().substring(0, 30) + '...' : message.trim();
+      
+      setLastMessages(prev => ({
+        ...prev,
+        [teacherId]: {
+          time: currentTime,
+          text: messageText
+        }
+      }));
+      
       setMessage('');
+      
+      // Auto-scroll to bottom after sending message
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     } catch (error: any) {
-      // Fallback to local message if API fails
+      // Don't add to recent chat if message fails
       const fallbackMessage: Message = {
         id: Date.now().toString(),
         text: message.trim(),
@@ -311,7 +506,7 @@ const ChatWithTeacherScreen = () => {
       setMessages(prev => [...prev, fallbackMessage]);
       setMessage('');
     }
-  }, [message, selectedTeacher, user]);
+  }, [message, selectedTeacher, user, saveRecentChatToStorage]); // Add saveRecentChatToStorage to dependency array
 
   // Search functionality
   const handleSearch = (query: string) => {
@@ -384,6 +579,13 @@ const ChatWithTeacherScreen = () => {
 
   const renderMessage: ListRenderItem<Message> = ({ item }) => {
     const isMyMessage = item.sender === 'me';
+    
+    console.log('Render Message Debug:', {
+      messageText: item.text,
+      sender: item.sender,
+      isMyMessage,
+      messageId: item.id
+    });
 
     return (
       <View style={[
@@ -446,7 +648,7 @@ const ChatWithTeacherScreen = () => {
             </View>
           ) : (
             <FlatList
-              data={teachers}
+              data={sortedTeachers}
               keyExtractor={item => item.id}
               renderItem={renderTeacherItem}
               contentContainerStyle={styles.teacherList}
@@ -464,7 +666,6 @@ const ChatWithTeacherScreen = () => {
           <View style={styles.chatHeader}>
             <Pressable
               onPress={() => {
-                // console.log('Arrow back button pressed');
                 setSelectedTeacher(null);
                 navigation.setOptions({ headerShown: true });
               }}
@@ -499,12 +700,13 @@ const ChatWithTeacherScreen = () => {
           </View>
 
           <FlatList
+            ref={flatListRef}
             data={messages}
             keyExtractor={item => item.id}
             renderItem={renderMessage}
             contentContainerStyle={styles.messagesList}
             inverted={false}
-            ListHeaderComponent={isLoadingMessages ? (
+            ListFooterComponent={isLoadingMessages ? (
               <View style={styles.loadingMessagesContainer}>
                 <ActivityIndicator size="small" color="#00A67E" />
                 <StyledText style={styles.loadingMessagesText}>Loading messages...</StyledText>
@@ -727,7 +929,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#DFE6E9',
   },
   backButton: {
     marginRight: 16,

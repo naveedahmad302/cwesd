@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView, Image, Text } from 'react-native';
-import { ChevronDown, User, LogOut } from 'lucide-react-native';
-import { ProfileService } from '../services/ProfileService';
+import { ChevronDown, User, LogOut, GraduationCap, Shield, MessageCircle } from 'lucide-react-native';
 import { createProfileService } from '../services/ProfileServiceFactory';
 import { useAuth } from '../../features/auth/AuthContext';
 
 interface ProfileHeaderButtonProps {
   onPress: () => void;
   userType?: 'student' | 'teacher';
-  profileService?: ProfileService;
   navigation?: any; // Navigation prop for logout and chat navigation
   onTeacherSelect?: (teacher: any) => void; // Callback for teacher selection
 }
@@ -16,32 +14,36 @@ interface ProfileHeaderButtonProps {
 const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({ 
   onPress, 
   userType = 'student',
-  profileService,
   navigation,
   onTeacherSelect
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { logout: authLogout, user } = useAuth(); // Get user data from AuthContext
+  const { logout: authLogout, user } = useAuth(); // Remove recentChatUsers and addRecentChatUser
 
-  // Use provided service or create one based on userType
-  const service = profileService || createProfileService(userType);
+  // Use created service based on userType
+  const service = createProfileService(userType);
 
-  // Load profiles when component mounts
+  // Load profiles when component mounts and when dropdown is opened
   useEffect(() => {
     const loadProfiles = async () => {
       try {
         setLoading(true);
-        console.log('Loading profiles for userType:', userType);
+        console.log('ProfileHeaderButton: Loading profiles...');
+        
+        // Service now handles persistent recent chats internally
         const profileData = await service.getProfiles();
-        console.log('Raw profile data:', profileData);
-        console.log('Number of profiles received:', profileData.length);
-        console.log('Profile details:', profileData.map((p: any, i: number) => ({ index: i, id: p.id, name: p.name, image: p.image })));
+        console.log(`ProfileHeaderButton: Loaded ${profileData.length} profiles`);
+        console.log('ProfileHeaderButton: Profile data with recent chat info:', profileData.map(p => ({ 
+          name: p.name, 
+          isRecentChat: p.isRecentChat,
+          id: p.id 
+        })));
+          
         setProfiles(profileData);
-        console.log('Profiles loaded:', profileData.length);
       } catch (error) {
-        console.error('Error loading profiles:', error);
+        console.error('ProfileHeaderButton: Error loading profiles:', error);
         setProfiles([]); // Ensure empty array on error
       } finally {
         setLoading(false);
@@ -49,7 +51,28 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
     };
 
     loadProfiles();
-  }, [service]);
+  }, [service, userType]);
+
+  // Refresh profiles when dropdown is opened
+  useEffect(() => {
+    if (showDropdown) {
+      const loadProfiles = async () => {
+        try {
+          console.log('ProfileHeaderButton: Refreshing profiles when dropdown opened...');
+          const profileData = await service.getProfiles();
+          console.log('ProfileHeaderButton: Refreshed profiles:', profileData.map(p => ({ 
+            name: p.name, 
+            isRecentChat: p.isRecentChat,
+            id: p.id 
+          })));
+          setProfiles(profileData);
+        } catch (error) {
+          console.error('ProfileHeaderButton: Error refreshing profiles:', error);
+        }
+      };
+      loadProfiles();
+    }
+  }, [showDropdown, service]);
 
   const handlePress = () => {
     setShowDropdown(!showDropdown);
@@ -59,35 +82,28 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
     setShowDropdown(false);
   };
 
-  const handleTeacherSelect = (teacher: any) => {
-    console.log('Teacher selected:', teacher);
+  const handleTeacherSelect = (profile: any) => {
     setShowDropdown(false);
     
-    // Transform teacher data to match ChatWithTeacherScreen format
-    const transformedTeacher = {
-      id: teacher._id || teacher.id,
-      name: teacher.name,
-      subject: teacher.qualification || teacher.subject || 'No subject specified',
-      avatar: teacher.picture || teacher.avatar || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s',
+    // Transform profile data to match ChatWithTeacherScreen format
+    const transformedProfile = {
+      id: profile._id || profile.id,
+      name: profile.name,
+      subject: profile.qualification || profile.subject || 'No subject specified',
+      avatar: profile.picture || profile.image || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s',
       online: Math.random() > 0.5, // Random online status for demo
-      email: teacher.email,
-      role: teacher.role || 'teacher'
+      email: profile.email,
+      role: profile.role || 'student'
     };
-
-    console.log('Transformed teacher:', transformedTeacher);
 
     // Call the callback if provided
     if (onTeacherSelect) {
-      console.log('Calling onTeacherSelect callback');
-      onTeacherSelect(transformedTeacher);
+      onTeacherSelect(transformedProfile);
     }
 
     // Navigate to chat screen if navigation is provided
     if (navigation) {
-      console.log('Navigating to Chat with Teacher');
-      navigation.navigate('Chat with Teacher', { teacher: transformedTeacher });
-    } else {
-      console.log('No navigation prop provided');
+      navigation.navigate('Chat with Teacher', { teacher: transformedProfile });
     }
   };
 
@@ -96,7 +112,6 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
     try {
       // Use AuthContext logout instead of service logout
       await authLogout();
-      console.log('Logout successful');
       
       // Navigate to Login screen
       if (navigation) {
@@ -106,7 +121,7 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
         });
       }
     } catch (error) {
-      console.error('Logout error:', error);
+      // Handle logout error silently
     }
   };
 
@@ -137,26 +152,31 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
                 {loading ? (
                   <View style={styles.loadingItem}>
                     <User size={20} color="#666" />
-                    <Text style={styles.loadingText}>Loading profiles...</Text>
+                    {/* <Text style={styles.loadingText}>Loading profiles...</Text> */}
                   </View>
                 ) : (
                   <>
                     {profiles.map((profile: any, index: number) => (
                       <TouchableOpacity 
-                        key={profile.id} 
-                        style={styles.profileItem}
+                        key={profile.id || index} 
+                        style={[
+                          styles.profileItem,
+                          profile.isRecentChat && styles.recentChatProfileItem
+                        ]}
                         onPress={() => {
-                          // console.log('Profile item pressed:', profile.name);
                           handleTeacherSelect(profile);
                         }}
-                        // onPressIn={() => console.log('Profile press in:', profile.name)}
-                        // onPressOut={() => console.log('Profile press out:', profile.name)}
                       >
                         <View style={styles.profileImageContainer}>
                           <Image 
                             source={{ uri: profile.image || profile.picture }} 
                             style={styles.profileImage}
                           />
+                          {/* {profile.isRecentChat && (
+                            <View style={styles.recentChatIndicator}>
+                              <MessageCircle size={8} color="#fff" />
+                            </View>
+                          )} */}
                         </View>
                       </TouchableOpacity>
                     ))}
@@ -166,6 +186,7 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
                 {/* Logout Button */}
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
                   <LogOut size={20} color="#FF3B30" />
+                  {/* <Text style={styles.logoutText}>Logout</Text> */}
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -231,15 +252,17 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     minWidth: 0,
-    maxHeight: 400, 
+    maxWidth: 60,
+    maxHeight: 300, 
   },
   profileItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
+    padding: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
+    minHeight: 50,
   },
   profileImageContainer: {
     alignItems: 'center',
@@ -252,18 +275,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DFE6E9',
   },
-  profileInfo: {
-    flex: 1,
+  recentChatProfileItem: {
+    backgroundColor: '#E8F4FD',
+    borderColor: '#4A90E2',
   },
-  profileName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 2,
+  recentChatIndicator: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#4A90E2',
+    borderRadius: 10,
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  profileSubject: {
-    fontSize: 14,
+  recentChatBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F4FD',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    gap: 2,
+  },
+  recentChatText: {
+    fontSize: 10,
+    color: '#4A90E2',
+    fontWeight: '500',
+  },
+  profileRoleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  profileRole: {
+    fontSize: 12,
     color: '#666',
+    fontWeight: '500',
   },
   loadingText: {
     fontSize: 14,
@@ -284,6 +333,12 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#F2F2F7',
+    gap: 8,
+  },
+  logoutText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    fontWeight: '500',
   },
   loadingItem: {
     alignItems: 'center',

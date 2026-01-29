@@ -17,6 +17,9 @@ type AuthContextType = {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  recentChatUsers: string[];
+  addRecentChatUser: (userId: string) => void;
+  clearRecentChatUsers: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,6 +28,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [recentChatUsers, setRecentChatUsers] = useState<string[]>([]);
 
   // Load user and token from storage on app start
   useEffect(() => {
@@ -137,8 +141,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const addRecentChatUser = (userId: string) => {
+    setRecentChatUsers(prev => {
+      if (!prev.includes(userId)) {
+        const updated = [userId, ...prev];
+        console.log('Added recent chat user:', userId);
+        return updated.slice(0, 10); // Keep only last 10
+      }
+      return prev;
+    });
+  };
+
+  const clearRecentChatUsers = () => {
+    setRecentChatUsers([]);
+    console.log('Cleared recent chat users');
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, recentChatUsers, addRecentChatUser, clearRecentChatUsers }}>
       {!isLoading && children}
     </AuthContext.Provider>
   );
