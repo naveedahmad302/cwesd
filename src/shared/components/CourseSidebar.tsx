@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import StyledText from './StyledText';
 import { X, BookOpen, FileText, Video, Users, MessageSquare } from 'lucide-react-native';
-import { quizzesAPI, courseSectionsAPI } from '../../services/api';
+import { useGetQuizzesQuery, useLazyGetCourseSectionsQuery } from '../../store/api';
 import ContentCard, { ContentItem } from './ContentCard';
 
 interface Quiz {
@@ -87,12 +87,22 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
   courseId,
   moodleId
 }) => {
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [lectures, setLectures] = useState<Assignment[]>([]);
-  const [loadingQuizzes, setLoadingQuizzes] = useState(false);
-  const [loadingAssignments, setLoadingAssignments] = useState(false);
-  
+  const { data: quizzesResponse, isLoading: loadingQuizzes } = useGetQuizzesQuery(undefined, { skip: !courseId });
+  const [getCourseSections, { isLoading: loadingAssignments }] = useLazyGetCourseSectionsQuery();
+
+  const quizzes = useMemo(() => {
+    if (!courseId || !quizzesResponse) return [];
+    const raw = (quizzesResponse as any)?.data ?? quizzesResponse?.data ?? quizzesResponse?.quizzes ?? quizzesResponse;
+    const quizData = Array.isArray(raw) ? raw : [];
+    return quizData.filter((quiz: any) => {
+      const matchesCourseId = quiz.course && quiz.course._id === courseId;
+      const matchesMoodleId = quiz.course && quiz.course.moodleId === parseInt(moodleId || '0', 10);
+      return matchesCourseId || matchesMoodleId;
+    });
+  }, [courseId, moodleId, quizzesResponse]);
+
   // Animation refs
   const slideAnim = useRef(new Animated.Value(-400)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -117,16 +127,31 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
     notSubmitted: quizzes.filter(quiz => !isQuizSubmitted(quiz)).length
   };
 
-  useEffect(() => {
-    console.log('CourseSidebar useEffect triggered:', { isVisible, courseId, moodleId });
-    if (isVisible) {
-      if (courseId) {
-        console.log('Calling fetchQuizzes and fetchCourseContent');
-        fetchQuizzes();
-        fetchCourseContent();
-      } else {
-        console.log('No courseId provided');
+  const fetchCourseContent = useCallback(async () => {
+    if (!moodleId) return;
+    try {
+      const result = await getCourseSections(moodleId).unwrap();
+      if (result.success && result.data?.sections) {
+        const sections = result.data.sections;
+        const allAssignments: Assignment[] = [];
+        const allLectures: Assignment[] = [];
+        sections.forEach((section: CourseSection) => {
+          section.modules.forEach((module: Assignment) => {
+            if (module.modname === 'assign') allAssignments.push(module);
+            else if (module.modname === 'resource') allLectures.push(module);
+          });
+        });
+        setAssignments(allAssignments);
+        setLectures(allLectures);
       }
+    } catch (error) {
+      console.error('Error fetching course content:', error);
+    }
+  }, [moodleId, getCourseSections]);
+
+  useEffect(() => {
+    if (isVisible && (courseId || moodleId)) {
+      fetchCourseContent();
       // Animate in
       Animated.parallel([
         Animated.timing(slideAnim, {
@@ -155,130 +180,7 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
         }),
       ]).start();
     }
-  }, [isVisible, courseId, slideAnim, fadeAnim]);
-
-  const fetchQuizzes = async () => {
-    if (!courseId) return;
-    
-    try {
-      setLoadingQuizzes(true);
-      console.log('Fetching quizzes for courseId:', courseId, 'moodleId:', moodleId);
-      const response = await quizzesAPI.getQuizzes();
-      console.log('Quizzes API response:', response.data);
-      
-      if (response.data && response.data.success && response.data.data) {
-        // The API returns actual quiz data in response.data.data array
-        const quizData = response.data.data;
-        console.log('Raw quiz data from API:', quizData);
-        console.log('Number of quizzes received:', quizData.length);
-        
-        // Log each quiz's submittedBy status before filtering
-        quizData.forEach((quiz: any, index: number) => {
-          console.log(`Quiz ${index + 1} - ${quiz.title}:`, {
-            _id: quiz._id,
-            submittedBy: quiz.submittedBy,
-            submittedByLength: quiz.submittedBy ? quiz.submittedBy.length : 0,
-            course: {
-              _id: quiz.course?._id,
-              moodleId: quiz.course?.moodleId
-            }
-          });
-        });
-        
-        // Filter quizzes by courseId
-        const courseQuizzes = quizData.filter((quiz: any) => {
-          const matchesCourseId = quiz.course && quiz.course._id === courseId;
-          const matchesMoodleId = quiz.course && quiz.course.moodleId === parseInt(moodleId || '0');
-          console.log(`Quiz ${quiz.title}: courseId=${matchesCourseId}, moodleId=${matchesMoodleId}`);
-          console.log(`  - Quiz course._id: ${quiz.course?._id}`);
-          console.log(`  - Quiz course.moodleId: ${quiz.course?.moodleId}`);
-          console.log(`  - Looking for courseId: ${courseId}`);
-          console.log(`  - Looking for moodleId: ${moodleId}`);
-          return matchesCourseId || matchesMoodleId;
-        });
-        
-        console.log('Filtered quizzes for course:', courseQuizzes);
-        console.log('CourseId being used for filtering:', courseId);
-        console.log('MoodleId being used for filtering:', moodleId);
-        
-        if (courseQuizzes.length > 0) {
-          setQuizzes(courseQuizzes);
-          console.log('Set quizzes state with:', courseQuizzes.length, 'quizzes');
-          
-          // Log the final quiz data that will be used
-          courseQuizzes.forEach((quiz: any, index: number) => {
-            console.log(`Final Quiz ${index + 1} - ${quiz.title}:`, {
-              submittedBy: quiz.submittedBy,
-              submittedByLength: quiz.submittedBy ? quiz.submittedBy.length : 0
-            });
-          });
-        } else {
-          console.log('No quizzes found for course:', courseId);
-          console.log('Available course IDs in quizzes:', quizData.map(q => q.course._id));
-          console.log('Available moodle IDs in quizzes:', quizData.map(q => q.course.moodleId));
-          setQuizzes([]);
-        }
-      } else {
-        console.log('Invalid API response structure:', response.data);
-        setQuizzes([]);
-      }
-    } catch (error) {
-      console.error('Error fetching quizzes:', error);
-      setQuizzes([]);
-    } finally {
-      setLoadingQuizzes(false);
-    }
-  };
-
-  const fetchCourseContent = async () => {
-    console.log('fetchCourseContent called with moodleId:', moodleId);
-    if (!moodleId) {
-      console.log('No moodleId provided, returning');
-      return;
-    }
-    
-    try {
-      setLoadingAssignments(true);
-      console.log('Making API call to:', `/api/moodle/courses/${moodleId}/sections`);
-      const response = await courseSectionsAPI.getCourseSections(moodleId);
-      console.log('API response received:', response.data);
-      
-      if (response.data.success) {
-        const sections = response.data.data.sections;
-        console.log('Sections found:', sections);
-        
-        const allAssignments: Assignment[] = [];
-        const allLectures: Assignment[] = [];
-        // Note: We're not adding quizzes from course sections anymore since we have real quiz API
-        
-        sections.forEach((section: CourseSection) => {
-          console.log(`Processing section ${section.sectionNumber}:`, section.modules);
-          section.modules.forEach((module: Assignment) => {
-            if (module.modname === 'assign') {
-              allAssignments.push(module);
-              console.log('Found assignment:', module.name);
-            } else if (module.modname === 'resource') {
-              allLectures.push(module);
-              console.log('Found lecture:', module.name);
-            }
-            // Note: We're not processing 'quiz' modules from course sections anymore
-          });
-        });
-        
-        console.log('Final counts - Assignments:', allAssignments.length, 'Lectures:', allLectures.length);
-        
-        setAssignments(allAssignments);
-        setLectures(allLectures);
-        // Note: We're not setting quizzes here anymore to avoid overwriting real quiz data
-      } else {
-        console.log('API response was not successful');
-      }
-    } catch (error) {
-      console.error('Error fetching course content:', error);
-    } finally {
-      setLoadingAssignments(false);
-    }
-  };
+  }, [isVisible, courseId, moodleId, slideAnim, fadeAnim, fetchCourseContent]);
 
   const handleQuizPress = (quiz: Quiz) => {
     if (onQuizClick) {

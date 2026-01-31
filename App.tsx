@@ -1,28 +1,17 @@
 import React from 'react';
-
-import { AuthProvider } from './src/features/auth';
-
 import { AppNavigator } from './src/shared/navigation';
-
-import { Toast } from 'react-native-toast-message/lib/src/Toast';
-
+import Toast from 'react-native-toast-message';
+import { toastConfig } from './src/utils';
+import { StatusBar } from 'react-native';
 
 const App = () => {
-
   return (
-    <AuthProvider>
-
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="white" />
       <AppNavigator />
-
-      <Toast />
-
-    </AuthProvider>
-
+      <Toast config={toastConfig} />
+    </>
   );
-
 };
 
-
-
 export default App;
-

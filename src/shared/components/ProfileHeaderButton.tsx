@@ -1,128 +1,184 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Image, Text } from 'react-native';
-import { ChevronDown, User, LogOut, GraduationCap, Shield, MessageCircle } from 'lucide-react-native';
-import { createProfileService } from '../services/ProfileServiceFactory';
-import { useAuth } from '../../features/auth/AuthContext';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Image,
+} from 'react-native';
+import { ChevronDown, User, LogOut } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAppSelector } from '../../store';
+import {
+  useLogoutMutation,
+  useGetTeachersQuery,
+  useGetStudentsQuery,
+  useGetAdminsQuery,
+} from '../../store/api';
+import { performCompleteLogout } from '../../utils/logout';
+import type { ApiUser } from '../../types/users.types';
+
+const DEFAULT_AVATAR =
+  'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s';
+
+interface ProfileItem {
+  id: string;
+  _id: string;
+  name: string;
+  image: string;
+  picture?: string;
+  email?: string;
+  role: string;
+  qualification?: string;
+  isRecentChat: boolean;
+}
 
 interface ProfileHeaderButtonProps {
   onPress: () => void;
   userType?: 'student' | 'teacher';
-  navigation?: any; // Navigation prop for logout and chat navigation
-  onTeacherSelect?: (teacher: any) => void; // Callback for teacher selection
+  navigation?: any;
+  onTeacherSelect?: (teacher: any) => void;
 }
 
-const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({ 
-  onPress, 
+function mapToProfile(user: ApiUser, isRecentChat: boolean): ProfileItem {
+  return {
+    id: user._id,
+    _id: user._id,
+    name: user.name,
+    image: user.picture || DEFAULT_AVATAR,
+    picture: user.picture,
+    email: user.email,
+    role: user.role || 'student',
+    qualification: user.qualification,
+    isRecentChat,
+  };
+}
+
+const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
+  onPress,
   userType = 'student',
   navigation,
-  onTeacherSelect
+  onTeacherSelect,
 }) => {
+  const user = useAppSelector(state => state.user.user);
+  const [logoutMutation] = useLogoutMutation();
   const [showDropdown, setShowDropdown] = useState(false);
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { logout: authLogout, user } = useAuth(); // Remove recentChatUsers and addRecentChatUser
+  const [recentChatIds, setRecentChatIds] = useState<string[]>([]);
 
-  // Use created service based on userType
-  const service = createProfileService(userType);
+  const storageKey =
+    userType === 'student'
+      ? 'persistentRecentChats_student'
+      : 'persistentRecentChats_teacher';
 
-  // Load profiles when component mounts and when dropdown is opened
+  const { data: teachersData, isLoading: teachersLoading, refetch: refetchTeachers } =
+    useGetTeachersQuery(undefined, {
+      skip: userType !== 'student',
+    });
+  const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } =
+    useGetStudentsQuery(undefined, {
+      skip: userType !== 'teacher',
+    });
+  const { data: adminsData, isLoading: adminsLoading, refetch: refetchAdmins } = useGetAdminsQuery(
+    undefined,
+    {
+      skip: userType !== 'teacher',
+    },
+  );
+
   useEffect(() => {
-    const loadProfiles = async () => {
+    const load = async () => {
       try {
-        setLoading(true);
-        console.log('ProfileHeaderButton: Loading profiles...');
-        
-        // Service now handles persistent recent chats internally
-        const profileData = await service.getProfiles();
-        console.log(`ProfileHeaderButton: Loaded ${profileData.length} profiles`);
-        console.log('ProfileHeaderButton: Profile data with recent chat info:', profileData.map(p => ({ 
-          name: p.name, 
-          isRecentChat: p.isRecentChat,
-          id: p.id 
-        })));
-          
-        setProfiles(profileData);
-      } catch (error) {
-        console.error('ProfileHeaderButton: Error loading profiles:', error);
-        setProfiles([]); // Ensure empty array on error
-      } finally {
-        setLoading(false);
+        const stored = await AsyncStorage.getItem(storageKey);
+        setRecentChatIds(stored ? JSON.parse(stored) : []);
+      } catch {
+        setRecentChatIds([]);
       }
     };
+    load();
+  }, [storageKey, showDropdown]);
 
-    loadProfiles();
-  }, [service, userType]);
-
-  // Refresh profiles when dropdown is opened
+  // Refetch users when dropdown opens so list is fresh
   useEffect(() => {
     if (showDropdown) {
-      const loadProfiles = async () => {
-        try {
-          console.log('ProfileHeaderButton: Refreshing profiles when dropdown opened...');
-          const profileData = await service.getProfiles();
-          console.log('ProfileHeaderButton: Refreshed profiles:', profileData.map(p => ({ 
-            name: p.name, 
-            isRecentChat: p.isRecentChat,
-            id: p.id 
-          })));
-          setProfiles(profileData);
-        } catch (error) {
-          console.error('ProfileHeaderButton: Error refreshing profiles:', error);
-        }
-      };
-      loadProfiles();
+      if (userType === 'student') refetchTeachers();
+      else {
+        refetchStudents();
+        refetchAdmins();
+      }
     }
-  }, [showDropdown, service]);
+  }, [showDropdown, userType, refetchTeachers, refetchStudents, refetchAdmins]);
+
+  const profiles = useMemo((): ProfileItem[] => {
+    if (userType === 'student') {
+      const raw = (teachersData as any)?.data ?? teachersData?.data ?? [];
+      const list = Array.isArray(raw) ? raw : [];
+      return list
+        .map((u: ApiUser) => mapToProfile(u, recentChatIds.includes(u._id)))
+        .sort((a, b) => {
+          if (a.isRecentChat && b.isRecentChat)
+            return recentChatIds.indexOf(a.id) - recentChatIds.indexOf(b.id);
+          if (a.isRecentChat) return -1;
+          if (b.isRecentChat) return 1;
+          return a.name.localeCompare(b.name);
+        })
+        .slice(0, 4);
+    }
+    const studentsRaw = (studentsData as any)?.data ?? studentsData?.data ?? [];
+    const adminsRaw = (adminsData as any)?.data ?? adminsData?.data ?? [];
+    const students = Array.isArray(studentsRaw) ? studentsRaw : [];
+    const admins = Array.isArray(adminsRaw) ? adminsRaw : [];
+    const combined = [
+      ...students.map((u: ApiUser) =>
+        mapToProfile(u, recentChatIds.includes(u._id)),
+      ),
+      ...admins.map((u: ApiUser) =>
+        mapToProfile(u, recentChatIds.includes(u._id)),
+      ),
+    ];
+    return combined
+      .sort((a, b) => {
+        if (a.isRecentChat && b.isRecentChat)
+          return recentChatIds.indexOf(a.id) - recentChatIds.indexOf(b.id);
+        if (a.isRecentChat) return -1;
+        if (b.isRecentChat) return 1;
+        return a.name.localeCompare(b.name);
+      })
+      .slice(0, 4);
+  }, [userType, teachersData, studentsData, adminsData, recentChatIds]);
+
+  const loading =
+    (userType === 'student' && teachersLoading) ||
+    (userType === 'teacher' && (studentsLoading || adminsLoading));
 
   const handlePress = () => {
-    setShowDropdown(!showDropdown);
+    onPress?.();
+    setShowDropdown(prev => !prev);
   };
 
-  const handleCloseDropdown = () => {
+  const handleTeacherSelect = (profile: ProfileItem) => {
     setShowDropdown(false);
-  };
-
-  const handleTeacherSelect = (profile: any) => {
-    setShowDropdown(false);
-    
-    // Transform profile data to match ChatWithTeacherScreen format
-    const transformedProfile = {
+    const transformed = {
       id: profile._id || profile.id,
       name: profile.name,
-      subject: profile.qualification || profile.subject || 'No subject specified',
-      avatar: profile.picture || profile.image || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s',
-      online: Math.random() > 0.5, // Random online status for demo
+      subject: profile.qualification || 'No subject specified',
+      avatar: profile.picture || profile.image || DEFAULT_AVATAR,
+      online: Math.random() > 0.5,
       email: profile.email,
-      role: profile.role || 'student'
+      role: profile.role || 'student',
     };
-
-    // Call the callback if provided
-    if (onTeacherSelect) {
-      onTeacherSelect(transformedProfile);
-    }
-
-    // Navigate to chat screen if navigation is provided
-    if (navigation) {
-      navigation.navigate('Chat with Teacher', { teacher: transformedProfile });
-    }
+    onTeacherSelect?.(transformed);
+    navigation?.navigate('Chat with Teacher', { teacher: transformed });
   };
 
   const handleLogout = async () => {
     setShowDropdown(false);
     try {
-      // Use AuthContext logout instead of service logout
-      await authLogout();
-      
-      // Navigate to Login screen
-      if (navigation) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
-      }
-    } catch (error) {
-      // Handle logout error silently
+      await logoutMutation().unwrap();
+    } catch {
+      // still clear local state
     }
+    await performCompleteLogout({ callLogoutApi: false });
+    navigation?.reset({ index: 0, routes: [{ name: 'Login' }] });
   };
 
   return (
@@ -131,8 +187,8 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
         <View style={styles.profileContainer}>
           <View style={styles.profileImagePlaceholder}>
             {user?.picture ? (
-              <Image 
-                source={{ uri: user.picture }} 
+              <Image
+                source={{ uri: user.picture }}
                 style={styles.profileImage}
               />
             ) : (
@@ -142,51 +198,44 @@ const ProfileHeaderButton: React.FC<ProfileHeaderButtonProps> = ({
           <ChevronDown size={16} color="#000" style={styles.chevron} />
         </View>
       </TouchableOpacity>
-      
+
       {showDropdown && (
         <View style={styles.overlay}>
-          <TouchableOpacity style={styles.overlayTouchable} onPress={handleCloseDropdown} activeOpacity={1}>
+          <TouchableOpacity
+            style={styles.overlayTouchable}
+            onPress={() => setShowDropdown(false)}
+            activeOpacity={1}
+          >
             <View style={styles.dropdown}>
               <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Profile Options */}
                 {loading ? (
                   <View style={styles.loadingItem}>
                     <User size={20} color="#666" />
-                    {/* <Text style={styles.loadingText}>Loading profiles...</Text> */}
                   </View>
                 ) : (
-                  <>
-                    {profiles.map((profile: any, index: number) => (
-                      <TouchableOpacity 
-                        key={profile.id || index} 
-                        style={[
-                          styles.profileItem,
-                          profile.isRecentChat && styles.recentChatProfileItem
-                        ]}
-                        onPress={() => {
-                          handleTeacherSelect(profile);
-                        }}
-                      >
-                        <View style={styles.profileImageContainer}>
-                          <Image 
-                            source={{ uri: profile.image || profile.picture }} 
-                            style={styles.profileImage}
-                          />
-                          {/* {profile.isRecentChat && (
-                            <View style={styles.recentChatIndicator}>
-                              <MessageCircle size={8} color="#fff" />
-                            </View>
-                          )} */}
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </>
+                  profiles.map((profile, index) => (
+                    <TouchableOpacity
+                      key={profile.id || index}
+                      style={[
+                        styles.profileItem,
+                        profile.isRecentChat && styles.recentChatProfileItem,
+                      ]}
+                      onPress={() => handleTeacherSelect(profile)}
+                    >
+                      <View style={styles.profileImageContainer}>
+                        <Image
+                          source={{ uri: profile.image || profile.picture }}
+                          style={styles.profileImage}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  ))
                 )}
-                
-                {/* Logout Button */}
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <TouchableOpacity
+                  style={styles.logoutButton}
+                  onPress={handleLogout}
+                >
                   <LogOut size={20} color="#FF3B30" />
-                  {/* <Text style={styles.logoutText}>Logout</Text> */}
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -224,11 +273,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  chevron: {
-    marginLeft: 4,
-    marginTop: 5,
-  },
-  // Dropdown styles
+  chevron: { marginLeft: 4, marginTop: 5 },
   overlay: {
     position: 'absolute',
     top: 0,
@@ -237,9 +282,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 9998,
   },
-  overlayTouchable: {
-    flex: 1,
-  },
+  overlayTouchable: { flex: 1 },
   dropdown: {
     position: 'absolute',
     top: 70,
@@ -253,7 +296,7 @@ const styles = StyleSheet.create({
     elevation: 8,
     minWidth: 0,
     maxWidth: 60,
-    maxHeight: 300, 
+    maxHeight: 300,
   },
   profileItem: {
     flexDirection: 'row',
@@ -264,10 +307,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F2F2F7',
     minHeight: 50,
   },
-  profileImageContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  profileImageContainer: { alignItems: 'center', justifyContent: 'center' },
   profileImage: {
     width: 35,
     height: 35,
@@ -275,57 +315,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DFE6E9',
   },
-  recentChatProfileItem: {
-    backgroundColor: '#E8F4FD',
-    borderColor: '#4A90E2',
-  },
-  recentChatIndicator: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    backgroundColor: '#4A90E2',
-    borderRadius: 10,
-    width: 16,
-    height: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recentChatBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F4FD',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    gap: 2,
-  },
-  recentChatText: {
-    fontSize: 10,
-    color: '#4A90E2',
-    fontWeight: '500',
-  },
-  profileRoleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  profileRole: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  loadingText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#999',
-    padding: 8,
-    backgroundColor: '#f0f0f0',
-    textAlign: 'center',
-  },
+  recentChatProfileItem: { backgroundColor: '#E8F4FD', borderColor: '#4A90E2' },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -335,16 +325,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#F2F2F7',
     gap: 8,
   },
-  logoutText: {
-    fontSize: 16,
-    color: '#FF3B30',
-    fontWeight: '500',
-  },
-  loadingItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
+  loadingItem: { alignItems: 'center', justifyContent: 'center', padding: 20 },
 });
 
 export default ProfileHeaderButton;

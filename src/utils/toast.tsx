@@ -8,63 +8,181 @@ import {
   ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import Toast from 'react-native-toast-message';
+import Toast, {
+  BaseToast,
+  BaseToastProps,
+  ToastConfig,
+} from 'react-native-toast-message';
+import { CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react-native';
 
-// Toast configuration
-export const toastConfig = {
-  success: (props: any) => (
-    <View style={[styles.toastContainer, styles.successToast]}>
-      <Text style={[styles.toastText, styles.successText]}>{props.text1}</Text>
-      {props.text2 && <Text style={[styles.toastSubtext, styles.successText]}>{props.text2}</Text>}
-    </View>
+const toastProps: BaseToastProps = {
+  text1Style: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  text2Style: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  text2NumberOfLines: 10,
+  style: {
+    height: 'auto',
+    minHeight: 60,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+};
+
+export const toastConfig: ToastConfig = {
+  success: props => (
+    <BaseToast
+      {...props}
+      {...toastProps}
+      style={[toastProps.style, styles.success]}
+      renderLeadingIcon={() => (
+        <CheckCircle size={25} color="#10B981" style={styles.icon} />
+      )}
+    />
   ),
-  error: (props: any) => (
-    <View style={[styles.toastContainer, styles.errorToast]}>
-      <Text style={[styles.toastText, styles.errorText]}>{props.text1}</Text>
-      {props.text2 && <Text style={[styles.toastSubtext, styles.errorText]}>{props.text2}</Text>}
-    </View>
+  error: (props: BaseToastProps) => (
+    <BaseToast
+      {...props}
+      {...toastProps}
+      style={[toastProps.style, styles.error]}
+      renderLeadingIcon={() => (
+        <XCircle size={25} color="#EF4444" style={styles.icon} />
+      )}
+    />
   ),
-  info: (props: any) => (
-    <View style={[styles.toastContainer, styles.infoToast]}>
-      <Text style={[styles.toastText, styles.infoText]}>{props.text1}</Text>
-      {props.text2 && <Text style={[styles.toastSubtext, styles.infoText]}>{props.text2}</Text>}
-    </View>
+  warning: props => (
+    <BaseToast
+      {...props}
+      {...toastProps}
+      style={[toastProps.style, styles.warning]}
+      renderLeadingIcon={() => (
+        <AlertCircle size={25} color="#F59E0B" style={styles.icon} />
+      )}
+    />
+  ),
+  info: props => (
+    <BaseToast
+      {...props}
+      {...toastProps}
+      style={[toastProps.style, styles.info]}
+      renderLeadingIcon={() => (
+        <Info size={25} color="#3B82F6" style={styles.icon} />
+      )}
+    />
   ),
 };
 
-// Named export functions for utilities (following the requirement)
-export const showSuccessToast = (message: string, title?: string) => {
-  console.log('showSuccessToast:', { message, title });
+export const showSuccessToast = (text: string, title?: string) => {
+  const formattedText = text.endsWith?.('.') ? text : `${text}.`;
+
   Toast.show({
     type: 'success',
-    text1: title || 'Success',
-    text2: message,
+    text1: title,
+    text2: formattedText,
+    visibilityTime: 4000,
+    autoHide: true,
+    swipeable: true,
     position: 'top',
-    visibilityTime: 3000,
   });
 };
 
-export const showErrorToast = (message: string, title?: string) => {
-  console.log('showErrorToast:', { message, title });
+export const showErrorToast = (text: string, title?: string) => {
+  const formattedText = text.endsWith?.('.') ? text : `${text}.`;
+
   Toast.show({
     type: 'error',
-    text1: title || 'Error',
-    text2: message,
+    text1: title,
+    text2: formattedText,
+    visibilityTime: 7000,
+    autoHide: true,
+    swipeable: true,
     position: 'top',
-    visibilityTime: 4000,
   });
 };
 
-export const showInfoToast = (message: string, title?: string) => {
-  console.log('showInfoToast:', { message, title });
+export const showInfoToast = (text: string, title?: string) => {
+  const formattedText = text.endsWith?.('.') ? text : `${text}.`;
+
   Toast.show({
     type: 'info',
-    text1: title || 'Info',
-    text2: message,
+    text1: title,
+    text2: formattedText,
+    visibilityTime: 4000,
+    autoHide: true,
+    swipeable: true,
     position: 'top',
-    visibilityTime: 3000,
   });
 };
+
+export const showWarningToast = (text: string, title?: string) => {
+  const formattedText = text.endsWith?.('.') ? text : `${text}.`;
+
+  Toast.show({
+    type: 'warning',
+    text1: title,
+    text2: formattedText,
+    visibilityTime: 4500,
+    autoHide: true,
+    swipeable: true,
+    position: 'top',
+  });
+};
+
+const styles = StyleSheet.create({
+  success: {
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#10B981',
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    zIndex: 1000000,
+  },
+  error: {
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#EF4444',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    zIndex: 1000000,
+  },
+  warning: {
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+    zIndex: 1000000,
+  },
+  info: {
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    zIndex: 1000000,
+  },
+  icon: {
+    marginRight: -8,
+  },
+});
 
 // Confirmation Modal Component
 interface ConfirmationModalProps {
@@ -107,10 +225,18 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           </View>
 
           {/* Content */}
-          <ScrollView style={modalStyles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={modalStyles.content}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Warning icon */}
             <View style={modalStyles.iconContainer}>
-              <View style={[modalStyles.warningIcon, { backgroundColor: confirmColor }]}>
+              <View
+                style={[
+                  modalStyles.warningIcon,
+                  { backgroundColor: confirmColor },
+                ]}
+              >
                 <Icon name="warning" size={32} color="#FFFFFF" />
               </View>
             </View>
@@ -134,21 +260,29 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             )}
 
             {/* Warning text */}
-            <Text style={modalStyles.warningText}>This action cannot be undone.</Text>
+            <Text style={modalStyles.warningText}>
+              This action cannot be undone.
+            </Text>
           </ScrollView>
 
           {/* Buttons */}
           <View style={modalStyles.buttonContainer}>
             {/* Confirm button */}
-            <TouchableOpacity 
-              style={[modalStyles.confirmButton, { backgroundColor: confirmColor }]} 
+            <TouchableOpacity
+              style={[
+                modalStyles.confirmButton,
+                { backgroundColor: confirmColor },
+              ]}
               onPress={onConfirm}
             >
               <Text style={modalStyles.confirmButtonText}>{confirmText}</Text>
             </TouchableOpacity>
 
             {/* Cancel button */}
-            <TouchableOpacity style={modalStyles.cancelButton} onPress={onClose}>
+            <TouchableOpacity
+              style={modalStyles.cancelButton}
+              onPress={onClose}
+            >
               <Text style={modalStyles.cancelButtonText}>{cancelText}</Text>
             </TouchableOpacity>
           </View>
@@ -157,51 +291,6 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     </Modal>
   );
 };
-
-const styles = StyleSheet.create({
-  // Toast styles
-  toastContainer: {
-    padding: 16,
-    borderRadius: 10,
-    marginHorizontal: 0,
-    width: '95%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  toastText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  toastSubtext: {
-    fontSize: 14,
-    fontWeight: '400',
-  },
-  successToast: {
-    backgroundColor: '#4CAF50',
-  },
-  successText: {
-    color: '#FFFFFF',
-  },
-  errorToast: {
-    backgroundColor: '#F44336',
-  },
-  errorText: {
-    color: '#FFFFFF',
-  },
-  infoToast: {
-    backgroundColor: '#2196F3',
-  },
-  infoText: {
-    color: '#FFFFFF',
-  },
-});
 
 // Modal styles
 const modalStyles = StyleSheet.create({

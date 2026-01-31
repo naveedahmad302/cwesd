@@ -1,3 +1,7 @@
+/**
+ * Course as returned by GET /courses
+ * Matches API: { _id, moodleId, fullname, shortname, idnumber, categoryId, visible, startDate, endDate?, summary, summaryFormat?, ... }
+ */
 export interface Course {
   _id: string;
   moodleId: number;
@@ -9,17 +13,21 @@ export interface Course {
   startDate: string;
   endDate?: string;
   summary: string;
-  summaryFormat: number;
-  format: string;
-  numSections: number;
-  isActive: boolean;
-  enrolledCohorts: string[];
-  enrolledUsers: string[];
-  createdAt: string;
-  updatedAt: string;
-  __v: number;
+  summaryFormat?: number;
+  /** e.g. 'topics' */
+  format?: string;
+  numSections?: number;
+  isActive?: boolean;
+  enrolledCohorts?: string[];
+  enrolledUsers?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  __v?: number;
 }
 
+/**
+ * Response shape for GET /courses
+ */
 export interface CoursesResponse {
   success: boolean;
   total: number;

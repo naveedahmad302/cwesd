@@ -1,5 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions, ImageBackground } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Animated,
+  TouchableOpacity,
+  Dimensions,
+  ImageBackground,
+} from 'react-native';
 import { ArrowRight } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 
@@ -32,24 +40,34 @@ const SplashScreen = () => {
   };
 
   return (
-    <ImageBackground source={bgImage} style={styles.container} resizeMode="cover">
+    <ImageBackground
+      source={bgImage}
+      style={styles.container}
+      resizeMode="cover"
+    >
       {/* White curved shape at bottom */}
       {/* <View style={styles.whiteCurve} /> */}
 
       {/* Content */}
-      <Animated.View style={[
-        styles.contentContainer,
-        { 
-          opacity: fadeAnim, 
-          transform: [{ translateY: slideAnim }] 
-        }
-      ]}>
+      <Animated.View
+        style={[
+          styles.contentContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
         <Text style={styles.welcomeText}>Welcome</Text>
         <Text style={styles.subtitleText}>
-          Empowering women with skills, confidence, and opportunities to grow and lead.
+          Empowering women with skills, confidence, and opportunities to grow
+          and lead.
         </Text>
 
-        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
+        <TouchableOpacity
+          style={styles.continueButton}
+          onPress={handleContinue}
+        >
           <Text style={styles.continueButtonText}>Continue</Text>
           <View style={styles.arrowCircle}>
             <ArrowRight size={20} color="white" />

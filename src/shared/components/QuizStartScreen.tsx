@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import StyledText from './StyledText';
 import { HelpCircle, Clock, Target, Award, CirclePlay, ChevronRight, Menu } from 'lucide-react-native';
 import CourseSidebar from './CourseSidebar';
 import QuizScreen from './QuizScreen';
-import { quizzesAPI } from '../../services/api';
-import { useAuth } from '../../features/auth/AuthContext';
+import { useGetQuizByIdQuery, useStartAttemptMutation, useSubmitQuizMutation } from '../../store/api';
+import { useAppSelector } from '../../store';
 import { showErrorToast } from '../../utils/toast';
 
 interface QuizStartScreenProps {
@@ -72,13 +72,21 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
   onNavigateToLecture
 }) => {
   const navigation = useNavigation();
-  const { user } = useAuth();
+  const user = useAppSelector(state => state.user.user);
+  const { data: quizResponse, isLoading: isLoadingQuiz, isFetching, refetch } = useGetQuizByIdQuery(quizId!, { skip: !quizId });
+  const [startAttempt] = useStartAttemptMutation();
+  const [submitQuiz] = useSubmitQuizMutation();
   const [isStarting, setIsStarting] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
-  const [quizData, setQuizData] = useState<QuizApiResponse | null>(null);
-  const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+  const quizData = (quizResponse as any)?.data ?? quizResponse?.data ?? quizResponse ?? null;
 
   React.useEffect(() => {
     navigation.setOptions({ headerShown: !quizStarted });
@@ -86,33 +94,17 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
   }, [navigation, quizStarted]);
 
   React.useEffect(() => {
-    if (!quizId) {
-      return;
-    }
-
-    const fetchQuiz = async () => {
-      try {
-        setIsLoadingQuiz(true);
-        setQuizError(null);
-        const response = await quizzesAPI.getQuizById(quizId);
-        setQuizData(response.data?.data ?? null);
-      } catch (error) {
-        setQuizError('Unable to load quiz details.');
-      } finally {
-        setIsLoadingQuiz(false);
-      }
-    };
-
-    fetchQuiz();
-  }, [quizId]);
+    if (quizResponse === undefined && !isLoadingQuiz && quizId) setQuizError('Unable to load quiz details.');
+  }, [quizId, quizResponse, isLoadingQuiz]);
 
   const mappedQuestions = useMemo(() => {
-    return (quizData?.questions ?? []).map((question, index) => {
-      const correctAnswerIndex = question.options.findIndex(option => option.isCorrect);
+    const questions = (quizData?.questions ?? []) as QuizApiQuestion[];
+    return questions.map((question: QuizApiQuestion, index: number) => {
+      const correctAnswerIndex = question.options.findIndex((option: QuizApiQuestionOption) => option.isCorrect);
       return {
         id: index + 1,
         question: question.questionText,
-        options: question.options.map(option => option.text),
+        options: question.options.map((option: QuizApiQuestionOption) => option.text),
         correctAnswer: correctAnswerIndex,
         points: question.points,
       };
@@ -130,7 +122,8 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     if (!user?.id) {
       return 0;
     }
-    return (quizData?.submittedBy ?? []).filter((attempt) => {
+    const submittedBy = (quizData?.submittedBy ?? []) as Array<{ id?: string; _id?: string }>;
+    return submittedBy.filter((attempt: { id?: string; _id?: string }) => {
       const attemptId = attempt?.id ?? attempt?._id;
       return attemptId === user.id;
     }).length;
@@ -157,7 +150,7 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     setIsStarting(true);
 
     try {
-      await quizzesAPI.startAttempt(quizId, user.id);
+      await startAttempt({ quizId, studentId: user.id }).unwrap();
       setQuizStarted(true);
       onStartQuiz();
     } catch (error) {
@@ -186,7 +179,7 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     }
 
     try {
-      await quizzesAPI.submitQuiz(quizId, user.id, answers);
+      await submitQuiz({ quizId, studentId: user.id, answers }).unwrap();
     } catch (error) {
       Alert.alert('Unable to submit quiz', 'Please try again.');
     } finally {
@@ -254,7 +247,13 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
             <StyledText style={styles.headerTitle}>Course Content</StyledText>
           </TouchableOpacity>
 
-          <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.container}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing || isFetching} onRefresh={onRefresh} colors={['#E56B8C']} />
+            }
+          >
           <View style={styles.card}>
             {/* Icon Section */}
             <View style={styles.iconContainer}>

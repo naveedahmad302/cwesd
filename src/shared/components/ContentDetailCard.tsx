@@ -1,9 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import StyledText from './StyledText';
-import { HelpCircle, FileText, Video, CircleCheckBig, BookOpen, ExternalLink, Check, Upload, Clock, Calendar } from 'lucide-react-native';
-import { assignmentsAPI, transformSubmissionData } from '../../services/api';
+import {
+  HelpCircle,
+  FileText,
+  Video,
+  CircleCheckBig,
+  ExternalLink,
+} from 'lucide-react-native';
+import {
+  useLazyGetMySubmissionQuery,
+  useDraftAssignmentMutation,
+  useSubmitAssignmentMutation,
+} from '../../store/api';
+import { transformSubmissionData } from '../../utils/moodle';
 import * as DocumentPicker from '@react-native-documents/picker';
+import { getMimeTypeFromPath } from '../../utils/mimeTypes';
 
 export interface ContentDetailAction {
   id: string;
@@ -40,10 +59,10 @@ export interface ContentDetailCardProps {
   useDynamicData?: boolean;
 }
 
-const ContentDetailCard: React.FC<ContentDetailCardProps> = ({ 
-  title, 
-  description, 
-  type, 
+const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
+  title,
+  description,
+  type,
   actions,
   submissionStatus = 'new',
   submittedFiles = [],
@@ -52,8 +71,8 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
   moodleId,
   sectionNumber,
   instance,
-  assignmentId,
-  useDynamicData = false
+  // assignmentId,
+  useDynamicData = false,
 }) => {
   const [dynamicSubmissionData, setDynamicSubmissionData] = useState({
     submissionStatus: 'new' as 'new' | 'submitted' | 'draft',
@@ -61,75 +80,103 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
     submissionDate: '',
     lastModifiedDate: '',
   });
-  const [rawSubmissionData, setRawSubmissionData] = useState<any>(null); // Store raw API response
-  const [isLoading, setIsLoading] = useState(false);
+  const [rawSubmissionData, setRawSubmissionData] = useState<unknown>(null);
+  const [getMySubmission, { isLoading, isUninitialized }] =
+    useLazyGetMySubmissionQuery();
+  const [draftAssignment] = useDraftAssignmentMutation();
+  const [submitAssignmentMutation] = useSubmitAssignmentMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isLoadingSubmission =
+    isLoading || (isUninitialized === false && isLoading);
 
-  // Fetch submission data when using dynamic data
-  useEffect(() => {
-    if (useDynamicData && moodleId && sectionNumber && instance && type === 'assignment') {
-      fetchSubmissionData();
-    }
-  }, [useDynamicData, moodleId, sectionNumber, instance, type]);
-
-  const fetchSubmissionData = async () => {
+  const fetchSubmissionData = useCallback(async () => {
     if (!moodleId || !sectionNumber || !instance) {
-      console.log('Missing required parameters:', { moodleId, sectionNumber, instance });
+      console.log('Missing required parameters:', {
+        moodleId,
+        sectionNumber,
+        instance,
+      });
       return;
     }
 
-    console.log('Fetching submission data with:', { moodleId, sectionNumber, instance });
-    setIsLoading(true);
+    console.log('Fetching submission data with:', {
+      moodleId,
+      sectionNumber,
+      instance,
+    });
     try {
-      const response = await assignmentsAPI.getMySubmission(moodleId, sectionNumber, instance);
-      console.log('API response:', response.data);
-      
-      // Store raw API response for later reference
-      setRawSubmissionData(response.data);
-      
-      const transformedData = transformSubmissionData(response.data);
+      const data = await getMySubmission({
+        moodleId,
+        sectionNumber,
+        instance,
+      }).unwrap();
+      console.log('API response:', data);
+
+      setRawSubmissionData(data);
+      const transformedData = transformSubmissionData(
+        data as import('../../types/moodle.types').AssignmentSubmissionResponse,
+      );
       console.log('Transformed data:', transformedData);
       setDynamicSubmissionData(transformedData);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as {
+        status?: number;
+        data?: { message?: string };
+        message?: string;
+        code?: string;
+      };
       console.error('Error fetching submission data:', error);
       console.error('Error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message,
-        code: error.code
+        status: err?.status,
+        data: err?.data,
+        message: err?.message,
+        code: err?.code,
       });
-      
-      // Handle different error scenarios
-      if (error.response?.status === 500) {
+
+      if (err?.status === 500) {
         console.log('Server error - using default submission status');
-        // Keep default values on server error
-      } else if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
+      } else if (
+        err?.code === 'FETCH_ERROR' ||
+        err?.message?.includes('Network')
+      ) {
         console.log('Network error - using default submission status');
-        // Keep default values on network error
-      } else if (error.response?.status === 404) {
+      } else if (err?.status === 404) {
         console.log('No submission found - using default submission status');
-        // This is expected for new assignments
       } else {
         console.log('Other error - using default submission status');
       }
-      
-      // In all error cases, keep default values (new assignment)
+
       setDynamicSubmissionData({
         submissionStatus: 'new',
         submittedFiles: [],
         submissionDate: '',
         lastModifiedDate: '',
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [moodleId, sectionNumber, instance, getMySubmission]);
+
+  // Fetch submission data when using dynamic data
+  useEffect(() => {
+    if (
+      useDynamicData &&
+      moodleId &&
+      sectionNumber &&
+      instance &&
+      type === 'assignment'
+    ) {
+      fetchSubmissionData();
+    }
+  }, [
+    useDynamicData,
+    moodleId,
+    sectionNumber,
+    instance,
+    type,
+    fetchSubmissionData,
+  ]);
 
   const handleDocumentPicker = async () => {
     try {
-      console.log('=== STARTING DOCUMENT PICKER ===');
-      
       const result = await DocumentPicker.pick({
         presentationStyle: 'fullScreen',
         type: [DocumentPicker.types.pdf],
@@ -138,20 +185,17 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
 
       if (result && result.length > 0) {
         const pickedFile = result[0];
-        
-        console.log('=== PICKER RAW RESULTS ===');
-        console.log('PICKER uri:', pickedFile.uri);
-        console.log('PICKER name:', pickedFile.name);
-        console.log('PICKER type:', pickedFile.type);
-        
+
         // For content:// URIs, we need to handle them differently
         let fileUri = pickedFile.uri;
         let fileData: any = {
           uri: fileUri,
-          type: pickedFile.type || 'application/pdf',
+          type:
+            pickedFile.type ||
+            getMimeTypeFromPath(pickedFile.uri || pickedFile.name || ''),
           name: pickedFile.name || 'document.pdf',
         };
-        
+
         // If it's a content:// URI, try to read it as a blob first
         if (fileUri.startsWith('content://')) {
           console.log('=== HANDLING CONTENT:// URI ===');
@@ -159,30 +203,32 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
             // Read the file using fetch to get the actual file data
             const response = await fetch(fileUri);
             const blob = await response.blob();
-            
+
             console.log('=== BLOB CREATED ===');
             console.log('Blob size:', blob.size);
             console.log('Blob type:', blob.type);
-            
+
             // Create a File object from the blob for FormData
             const fileName = pickedFile.name || 'document.pdf';
             const file = new File([blob], fileName, { type: blob.type });
-            
+
             // Use the File object instead of URI for FormData
             fileData = file;
             console.log('=== FILE OBJECT CREATED ===');
-            
           } catch (conversionError: any) {
             console.error('Content conversion failed:', conversionError);
             // Fallback to original URI method
             console.log('=== FALLBACK TO ORIGINAL URI ===');
           }
         }
-        
+
         console.log('=== FINAL UPLOAD DATA ===');
         console.log('Upload data type:', typeof fileData);
-        console.log('Upload data:', fileData instanceof File ? 'File object' : 'URI object');
-        
+        console.log(
+          'Upload data:',
+          fileData instanceof File ? 'File object' : 'URI object',
+        );
+
         const newFile: SubmittedFile = {
           id: Date.now().toString(),
           name: pickedFile.name || 'Unknown File',
@@ -200,11 +246,14 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
         });
 
         // Show success message for file selection
-        Alert.alert('File Selected', `File "${pickedFile.name}" selected successfully!`);
-        
+        Alert.alert(
+          'File Selected',
+          `File "${pickedFile.name}" selected successfully!`,
+        );
+
         // Update the submitted files immediately for better UX
         const updatedFiles = [...currentSubmittedFiles, newFile];
-        
+
         if (useDynamicData) {
           setDynamicSubmissionData(prev => ({
             ...prev,
@@ -227,12 +276,17 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
   };
 
   const submitAssignment = async (files: SubmittedFile[], fileData?: any) => {
-    console.log('Submitting assignment with:', { moodleId, sectionNumber, instance, files: files.length });
-    
+    console.log('Submitting assignment with:', {
+      moodleId,
+      sectionNumber,
+      instance,
+      files: files.length,
+    });
+
     // Check if submission is allowed based on current status
-    if (currentSubmissionStatus === 'submitted' && !isLoading) {
+    if (currentSubmissionStatus === 'submitted' && !isLoadingSubmission) {
       Alert.alert(
-        'Already Submitted', 
+        'Already Submitted',
         'This assignment has already been submitted. You may need to edit the existing submission instead of creating a new one.',
         [
           {
@@ -240,16 +294,19 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
             onPress: () => {
               // Refresh to show current submission status
               fetchSubmissionData();
-            }
-          }
-        ]
+            },
+          },
+        ],
       );
       return;
     }
-    
+
     if (!moodleId || !sectionNumber || !instance) {
       console.log('Missing required parameters for submission');
-      Alert.alert('Demo Mode', 'File selected successfully. In production, this would be submitted to the server.');
+      Alert.alert(
+        'Demo Mode',
+        'File selected successfully. In production, this would be submitted to the server.',
+      );
       // Simulate successful submission in demo mode
       if (useDynamicData) {
         setDynamicSubmissionData(prev => ({
@@ -266,173 +323,192 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
     try {
       // Create FormData for file upload - exactly like Postman form-data
       const formData = new FormData();
-      
+
       // Add file (required field)
       if (files.length > 0) {
         const file = files[0];
-        
+
         console.log('=== PRE-UPLOAD FILE VALIDATION ===');
         console.log('File URI before upload:', file.uri);
         console.log('File name:', file.name);
         console.log('File type:', file.type);
         console.log('File data type:', typeof fileData);
-        
+
         // // Use the fileData if available (File object), otherwise use URI method
         // if (fileData instanceof File) {
         //   console.log('=== USING FILE OBJECT ===');
         //   formData.append('file', fileData, fileData.name);
         // } else {
-          console.log('=== USING URI METHOD ===');
-          // React Native file upload format - works with both file:// and content://
-          formData.append('file', {
-            uri: file.uri,
-            type: file.type,
-            name: file.name,  
-          } as any);
+        console.log('=== USING URI METHOD ===');
+        // React Native file upload format - works with both file:// and content://
+        formData.append('file', {
+          uri: file.uri,
+          type: file.type,
+          name: file.name,
+        } as any);
         // }
-        
+
         console.log('=== FILE ADDED TO FORMDATA ===');
       }
 
       // Add required form fields (exactly matching Postman)
-      formData.append('displayName', `Assignment Submission - ${new Date().toLocaleDateString()}`);
-      
+      formData.append(
+        'displayName',
+        `Assignment Submission - ${new Date().toLocaleDateString()}`,
+      );
+
       // Debug: Log FormData structure
       console.log('=== FORM DATA STRUCTURE ===');
-      console.log('displayName:', `Assignment Submission - ${new Date().toLocaleDateString()}`);
-      console.log('File details:', files.length > 0 ? {
-        name: files[0].name,
-        type: files[0].type,
-        uri: files[0].uri
-      } : 'No file');
+      console.log(
+        'displayName:',
+        `Assignment Submission - ${new Date().toLocaleDateString()}`,
+      );
+      console.log(
+        'File details:',
+        files.length > 0
+          ? {
+              name: files[0].name,
+              type: files[0].type,
+              uri: files[0].uri,
+            }
+          : 'No file',
+      );
       console.log('FormData ready for upload (Postman style)');
-      
+
       console.log('Submitting to API...');
-      
-      // Determine the submission strategy based on current status
-      let response;
+
+      const payload = { moodleId, sectionNumber, instance, data: formData };
+      let result: {
+        success?: boolean;
+        message?: string;
+        data?: { status?: string; submittedAt?: string } | unknown;
+      };
+
       if (currentSubmissionStatus === 'draft') {
-        // Edit existing draft - just update the draft
         console.log('11111 Editing existing draft...', formData);
-        
-        response = await assignmentsAPI.draftAssignment(moodleId, sectionNumber, instance, formData);
-        console.log('2222 Draft updated response:', response.data);
-        
-        if (response.data?.success) {
+        result = await draftAssignment(payload).unwrap();
+        console.log('2222 Draft updated response:', result);
+
+        if (result?.success) {
           Alert.alert('Success', 'Draft updated successfully!');
-          // Refresh the submission data to show updated draft
           fetchSubmissionData();
         } else {
-          throw new Error(response.data?.message || 'Failed to update draft');
+          throw new Error(result?.message || 'Failed to update draft');
         }
-      } else if (currentSubmissionStatus === 'new' && currentSubmittedFiles.length === 0) {
-        // Check if there's an existing submission by looking at the raw API data
-        const hasExistingSubmission = rawSubmissionData?.hasSubmission === true;
-        
+        return;
+      }
+
+      if (
+        currentSubmissionStatus === 'new' &&
+        currentSubmittedFiles.length === 0
+      ) {
+        const hasExistingSubmission =
+          (rawSubmissionData as { hasSubmission?: boolean })?.hasSubmission ===
+          true;
+
         if (hasExistingSubmission) {
-          // Existing submission - draft first, then submit
           console.log('Existing submission detected, creating draft first...');
           try {
-            const draftResponse = await assignmentsAPI.draftAssignment(moodleId, sectionNumber, instance, formData);
-            console.log('Draft response:', draftResponse.data);
-            
-            if (draftResponse.data?.success) {
-              // Now submit the draft
-              response = await assignmentsAPI.submitAssignment(moodleId, sectionNumber, instance, formData);
+            const draftResult = await draftAssignment(payload).unwrap();
+            if (draftResult?.success) {
+              result = await submitAssignmentMutation(payload).unwrap();
             } else {
-              throw new Error(draftResponse.data?.message || 'Failed to create draft');
+              throw new Error(draftResult?.message || 'Failed to create draft');
             }
-          } catch (draftError: any) {
+          } catch (draftError: unknown) {
+            const e = draftError as {
+              status?: number;
+              data?: unknown;
+              message?: string;
+              code?: string;
+            };
             console.error('Draft API error details:', {
-              status: draftError.response?.status,
-              statusText: draftError.response?.statusText,
-              data: draftError.response?.data,
-              message: draftError.message,
-              code: draftError.code
+              status: e?.status,
+              data: e?.data,
+              message: e?.message,
+              code: e?.code,
             });
-            
-            // Try to get more detailed error info
-            if (draftError.response?.data) {
-              console.error('Server error response:', JSON.stringify(draftError.response.data, null, 2));
-            }
-            
+            if (e?.data)
+              console.error(
+                'Server error response:',
+                JSON.stringify(e.data, null, 2),
+              );
             throw draftError;
           }
         } else {
-          // Truly new submission - use submit directly
           console.log('New submission, submitting directly...');
-          response = await assignmentsAPI.submitAssignment(moodleId, sectionNumber, instance, formData);
+          result = await submitAssignmentMutation(payload).unwrap();
         }
       } else {
-        // Existing submission - draft first, then submit
         console.log('Creating draft first...');
-        const draftResponse = await assignmentsAPI.draftAssignment(moodleId, sectionNumber, instance, formData);
-        console.log('Draft response:', draftResponse.data);
-        
-        if (draftResponse.data?.success) {
-          // Now submit the draft
-          response = await assignmentsAPI.submitAssignment(moodleId, sectionNumber, instance, formData);
+        const draftResult = await draftAssignment(payload).unwrap();
+        if (draftResult?.success) {
+          result = await submitAssignmentMutation(payload).unwrap();
         } else {
-          throw new Error(draftResponse.data?.message || 'Failed to create draft');
+          throw new Error(draftResult?.message || 'Failed to create draft');
         }
       }
-      
-      console.log('Submission response:', response.data);
-      
-      // Handle API response according to your specified format
-      if (response.data?.success) {
-        const { data } = response.data;
+
+      console.log('Submission response:', result);
+
+      if (result?.success) {
+        const data = result.data as
+          | { status?: string; submittedAt?: string }
+          | undefined;
         console.log('Submission successful:', data);
-        
-        // Update local state with API response
-        if (useDynamicData) {
+
+        if (useDynamicData && data) {
           setDynamicSubmissionData(prev => ({
             ...prev,
-            submissionStatus: data.status || 'submitted',
-            submissionDate: data.submittedAt ? new Date(data.submittedAt).toLocaleDateString() : new Date().toLocaleDateString(),
-            lastModifiedDate: data.submittedAt ? new Date(data.submittedAt).toLocaleDateString() : new Date().toLocaleDateString(),
+            submissionStatus:
+              (data.status as 'new' | 'submitted' | 'draft') || 'submitted',
+            submissionDate: data.submittedAt
+              ? new Date(data.submittedAt).toLocaleDateString()
+              : new Date().toLocaleDateString(),
+            lastModifiedDate: data.submittedAt
+              ? new Date(data.submittedAt).toLocaleDateString()
+              : new Date().toLocaleDateString(),
           }));
         }
 
-        Alert.alert('Success', response.data.message || 'Assignment submitted successfully!');
-        
-        // Refresh submission data to get latest state
+        Alert.alert(
+          'Success',
+          result.message || 'Assignment submitted successfully!',
+        );
         fetchSubmissionData();
       } else {
-        // Check if it's a submission restriction error
-        if (response.data?.message?.includes('already submitted') || 
-            response.data?.message?.includes('cannot submit')) {
+        if (
+          result?.message?.includes('already submitted') ||
+          result?.message?.includes('cannot submit')
+        ) {
           Alert.alert(
-            'Submission Not Allowed', 
-            response.data.message || 'This assignment has already been submitted and cannot be submitted again. You may need to edit the existing submission.',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  // Refresh to show current submission status
-                  fetchSubmissionData();
-                }
-              }
-            ]
+            'Submission Not Allowed',
+            result.message ||
+              'This assignment has already been submitted and cannot be submitted again. You may need to edit the existing submission.',
+            [{ text: 'OK', onPress: () => fetchSubmissionData() }],
           );
         } else {
-          throw new Error(response.data?.message || 'Submission failed');
+          throw new Error(result?.message || 'Submission failed');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as {
+        status?: number;
+        data?: { message?: string };
+        message?: string;
+        code?: string;
+      };
       console.error('Submission error:', error);
       console.error('Submission error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message,
-        code: error.code
+        status: err?.status,
+        data: err?.data,
+        message: err?.message,
+        code: err?.code,
       });
-      
-      // Check different error scenarios
-      if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
+
+      if (err?.code === 'FETCH_ERROR' || err?.message?.includes('Network')) {
         Alert.alert(
-          'Demo Mode', 
+          'Demo Mode',
           'Server is not available. File selected successfully for demo purposes.',
           [
             {
@@ -447,13 +523,13 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                     lastModifiedDate: new Date().toLocaleDateString(),
                   }));
                 }
-              }
-            }
-          ]
+              },
+            },
+          ],
         );
-      } else if (error.response?.status === 500) {
+      } else if (err?.status === 500) {
         Alert.alert(
-          'Demo Mode', 
+          'Demo Mode',
           'Server error occurred. File selected successfully for demo purposes.',
           [
             {
@@ -468,20 +544,37 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                     lastModifiedDate: new Date().toLocaleDateString(),
                   }));
                 }
-              }
-            }
-          ]
+              },
+            },
+          ],
         );
-      } else if (error.response?.status === 400) {
-        Alert.alert('Error', error.response?.data?.message || 'Invalid file format or size. Please check your submission.');
-      } else if (error.response?.status === 401) {
-        Alert.alert('Error', 'You are not authorized to submit this assignment.');
-      } else if (error.response?.status === 403) {
-        Alert.alert('Error', 'Assignment submission is not allowed at this time.');
-      } else if (error.response?.status === 404) {
-        Alert.alert('Error', 'Assignment not found. Please refresh and try again.');
+      } else if (err?.status === 400) {
+        Alert.alert(
+          'Error',
+          (err?.data as { message?: string })?.message ||
+            'Invalid file format or size. Please check your submission.',
+        );
+      } else if (err?.status === 401) {
+        Alert.alert(
+          'Error',
+          'You are not authorized to submit this assignment.',
+        );
+      } else if (err?.status === 403) {
+        Alert.alert(
+          'Error',
+          'Assignment submission is not allowed at this time.',
+        );
+      } else if (err?.status === 404) {
+        Alert.alert(
+          'Error',
+          'Assignment not found. Please refresh and try again.',
+        );
       } else {
-        Alert.alert('Error', error.response?.data?.message || 'Failed to submit assignment. Please try again.');
+        Alert.alert(
+          'Error',
+          (err?.data as { message?: string })?.message ||
+            'Failed to submit assignment. Please try again.',
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -497,10 +590,18 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
   };
 
   // Use dynamic data if enabled, otherwise use static props
-  const currentSubmissionStatus = useDynamicData ? dynamicSubmissionData.submissionStatus : submissionStatus;
-  const currentSubmittedFiles = useDynamicData ? dynamicSubmissionData.submittedFiles : submittedFiles;
-  const currentSubmissionDate = useDynamicData ? dynamicSubmissionData.submissionDate : submissionDate;
-  const currentLastModifiedDate = useDynamicData ? dynamicSubmissionData.lastModifiedDate : lastModifiedDate;
+  const currentSubmissionStatus = useDynamicData
+    ? dynamicSubmissionData.submissionStatus
+    : submissionStatus;
+  const currentSubmittedFiles = useDynamicData
+    ? dynamicSubmissionData.submittedFiles
+    : submittedFiles;
+  const currentSubmissionDate = useDynamicData
+    ? dynamicSubmissionData.submissionDate
+    : submissionDate;
+  const currentLastModifiedDate = useDynamicData
+    ? dynamicSubmissionData.lastModifiedDate
+    : lastModifiedDate;
   const getIcon = () => {
     switch (type) {
       case 'quiz':
@@ -527,8 +628,10 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
     }
   };
 
-  const primaryActions = actions.filter(action => action.type === 'primary');
-  const secondaryActions = actions.filter(action => action.type === 'secondary');
+  // const primaryActions = actions.filter(action => action.type === 'primary');
+  // const secondaryActions = actions.filter(
+  //   action => action.type === 'secondary',
+  // );
   const isAssignment = type === 'assignment';
 
   // Override the submit assignment action to use document picker
@@ -537,14 +640,20 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
       // Change button text and behavior based on submission status
       const isDraft = currentSubmissionStatus === 'draft';
       const isSubmitted = currentSubmissionStatus === 'submitted';
-      
+
       return {
         ...action,
-        title: isDraft ? 'Edit Assignment' : isSubmitted ? 'View Submission' : action.title,
-        onPress: isSubmitted ? () => {
-          // For submitted assignments, just show the submission details
-          console.log('Viewing submitted assignment');
-        } : handleDocumentPicker,
+        title: isDraft
+          ? 'Edit Assignment'
+          : isSubmitted
+          ? 'View Submission'
+          : action.title,
+        onPress: isSubmitted
+          ? () => {
+              // For submitted assignments, just show the submission details
+              console.log('Viewing submitted assignment');
+            }
+          : handleDocumentPicker,
       };
     }
     return action;
@@ -554,7 +663,12 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.card}>
         {/* Icon Section */}
-        <View style={[styles.iconContainer, { backgroundColor: getIconBackground() }]}>
+        <View
+          style={[
+            styles.iconContainer,
+            { backgroundColor: getIconBackground() },
+          ]}
+        >
           {getIcon()}
         </View>
 
@@ -566,30 +680,48 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
 
         {isAssignment && (
           <View style={styles.actionsContainer}>
-            {enhancedActions.filter(action => action.type === 'primary' && action.id !== 'open-moodle' && action.id !== 'mark-complete').map((action, index) => (
-              <TouchableOpacity
-                key={action.id}
-                style={[
-                  styles.assignmentButton,
-                  index === 0 ? styles.primaryButton : styles.whiteButton,
-                ]}
-                onPress={action.onPress}
-                disabled={isSubmitting}
-              >
-                {action.icon && <View style={styles.buttonIcon}>{action.icon}</View>}
-                <StyledText
-                  style={index === 0 ? styles.primaryButtonText : styles.whiteButtonText}
+            {enhancedActions
+              .filter(
+                action =>
+                  action.type === 'primary' &&
+                  action.id !== 'open-moodle' &&
+                  action.id !== 'mark-complete',
+              )
+              .map((action, index) => (
+                <TouchableOpacity
+                  key={action.id}
+                  style={[
+                    styles.assignmentButton,
+                    index === 0 ? styles.primaryButton : styles.whiteButton,
+                  ]}
+                  onPress={action.onPress}
+                  disabled={isSubmitting}
                 >
-                  {isSubmitting && action.id === 'submit' ? 
-                    (currentSubmissionStatus === 'draft' ? 'Updating...' : 'Submitting...') : 
-                    action.title
-                  }
-                </StyledText>
-                {isSubmitting && action.id === 'submit' && (
-                  <ActivityIndicator size="small" color="#ffffff" style={styles.buttonLoading} />
-                )}
-              </TouchableOpacity>
-            ))}
+                  {action.icon && (
+                    <View style={styles.buttonIcon}>{action.icon}</View>
+                  )}
+                  <StyledText
+                    style={
+                      index === 0
+                        ? styles.primaryButtonText
+                        : styles.whiteButtonText
+                    }
+                  >
+                    {isSubmitting && action.id === 'submit'
+                      ? currentSubmissionStatus === 'draft'
+                        ? 'Updating...'
+                        : 'Submitting...'
+                      : action.title}
+                  </StyledText>
+                  {isSubmitting && action.id === 'submit' && (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffffff"
+                      style={styles.buttonLoading}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
           </View>
         )}
 
@@ -597,65 +729,92 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
         {isAssignment && (
           <View style={styles.submissionCard}>
             <View style={styles.submissionHeader}>
-              <StyledText style={styles.submissionTitle}>My Submission</StyledText>
-              {isLoading && (
-                <ActivityIndicator size="small" color="#E56B8C" style={styles.loadingIndicator} />
+              <StyledText style={styles.submissionTitle}>
+                My Submission
+              </StyledText>
+              {isLoadingSubmission && (
+                <ActivityIndicator
+                  size="small"
+                  color="#E56B8C"
+                  style={styles.loadingIndicator}
+                />
               )}
             </View>
-            
-            {!isLoading && (
+
+            {!isLoadingSubmission && (
               <>
                 {currentSubmissionStatus === 'submitted' ? (
                   // Submitted Design - Based on your screenshot
                   <View>
                     <View style={styles.submissionRow}>
-                      <StyledText style={styles.submissionLabel}>Status:</StyledText>
+                      <StyledText style={styles.submissionLabel}>
+                        Status:
+                      </StyledText>
                       <View style={[styles.badge, styles.submittedBadge]}>
-                        <StyledText style={styles.submittedBadgeText}>submitted</StyledText>
+                        <StyledText style={styles.submittedBadgeText}>
+                          submitted
+                        </StyledText>
                       </View>
                     </View>
-                    
+
                     <View style={styles.submissionRow}>
-                      <StyledText style={styles.submissionLabel}>Actions:</StyledText>
+                      <StyledText style={styles.submissionLabel}>
+                        Actions:
+                      </StyledText>
                       <StyledText style={styles.noActionsText}>-</StyledText>
                     </View>
-                    
-                    {currentSubmittedFiles && currentSubmittedFiles.length > 0 && (
-                      <View style={styles.submittedFilesSection}>
-                        <StyledText style={styles.submissionLabel}>Submitted Files:</StyledText>
-                        {currentSubmittedFiles.map((file) => (
-                          <View key={file.id} style={styles.fileItem}>
-                            <View style={styles.fileInfo}>
-                              <FileText size={16} color="#6B7280" />
-                              <View style={styles.fileDetails}>
-                                <StyledText style={styles.fileName}>{file.name}</StyledText>
-                                <StyledText style={styles.fileMeta}>{file.size} • {file.type}</StyledText>
+
+                    {currentSubmittedFiles &&
+                      currentSubmittedFiles.length > 0 && (
+                        <View style={styles.submittedFilesSection}>
+                          <StyledText style={styles.submissionLabel}>
+                            Submitted Files:
+                          </StyledText>
+                          {currentSubmittedFiles.map(file => (
+                            <View key={file.id} style={styles.fileItem}>
+                              <View style={styles.fileInfo}>
+                                <FileText size={16} color="#6B7280" />
+                                <View style={styles.fileDetails}>
+                                  <StyledText style={styles.fileName}>
+                                    {file.name}
+                                  </StyledText>
+                                  <StyledText style={styles.fileMeta}>
+                                    {file.size} • {file.type}
+                                  </StyledText>
+                                </View>
                               </View>
+                              {file.url && (
+                                <TouchableOpacity
+                                  style={styles.externalLinkIcon}
+                                  onPress={() => {
+                                    // Handle file download/view
+                                    console.log('Opening file:', file.url);
+                                  }}
+                                >
+                                  <ExternalLink size={16} color="#6B7280" />
+                                </TouchableOpacity>
+                              )}
                             </View>
-                            {file.url && (
-                              <TouchableOpacity 
-                                style={styles.externalLinkIcon}
-                                onPress={() => {
-                                  // Handle file download/view
-                                  console.log('Opening file:', file.url);
-                                }}
-                              >
-                                <ExternalLink size={16} color="#6B7280" />
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    
+                          ))}
+                        </View>
+                      )}
+
                     <View style={styles.datesRow}>
                       <View style={styles.submissionRow}>
-                        <StyledText style={styles.dateLabel}>Created:</StyledText>
-                        <StyledText style={styles.dateValue}>{currentSubmissionDate || '29/01/2026'}</StyledText>
+                        <StyledText style={styles.dateLabel}>
+                          Created:
+                        </StyledText>
+                        <StyledText style={styles.dateValue}>
+                          {currentSubmissionDate || '29/01/2026'}
+                        </StyledText>
                       </View>
                       <View style={styles.submissionRow}>
-                        <StyledText style={styles.dateLabel}>Modified:</StyledText>
-                        <StyledText style={styles.dateValue}>{currentLastModifiedDate || '29/01/2026'}</StyledText>
+                        <StyledText style={styles.dateLabel}>
+                          Modified:
+                        </StyledText>
+                        <StyledText style={styles.dateValue}>
+                          {currentLastModifiedDate || '29/01/2026'}
+                        </StyledText>
                       </View>
                     </View>
                   </View>
@@ -663,43 +822,66 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                   // Draft Design - For assignments that have been drafted but not submitted
                   <View>
                     <View style={styles.submissionRow}>
-                      <StyledText style={styles.submissionLabel}>Status:</StyledText>
+                      <StyledText style={styles.submissionLabel}>
+                        Status:
+                      </StyledText>
                       <View style={[styles.badge, styles.draftBadge]}>
-                        <StyledText style={styles.draftBadgeText}>draft</StyledText>
+                        <StyledText style={styles.draftBadgeText}>
+                          draft
+                        </StyledText>
                       </View>
                     </View>
                     <View style={styles.submissionRow}>
-                      <StyledText style={styles.submissionLabel}>Actions:</StyledText>
+                      <StyledText style={styles.submissionLabel}>
+                        Actions:
+                      </StyledText>
                       <View style={[styles.badge, styles.actionBadge]}>
-                        <StyledText style={styles.actionBadgeText}>Can Edit</StyledText>
+                        <StyledText style={styles.actionBadgeText}>
+                          Can Edit
+                        </StyledText>
                       </View>
                     </View>
-                    
-                    {currentSubmittedFiles && currentSubmittedFiles.length > 0 && (
-                      <View style={styles.submittedFilesSection}>
-                        <StyledText style={styles.submissionLabel}>Draft Files:</StyledText>
-                        {currentSubmittedFiles.map((file) => (
-                          <View key={file.id} style={styles.fileItem}>
-                            <View style={styles.fileInfo}>
-                              <FileText size={16} color="#6B7280" />
-                              <View style={styles.fileDetails}>
-                                <StyledText style={styles.fileName}>{file.name}</StyledText>
-                                <StyledText style={styles.fileMeta}>{file.size} • {file.type}</StyledText>
+
+                    {currentSubmittedFiles &&
+                      currentSubmittedFiles.length > 0 && (
+                        <View style={styles.submittedFilesSection}>
+                          <StyledText style={styles.submissionLabel}>
+                            Draft Files:
+                          </StyledText>
+                          {currentSubmittedFiles.map(file => (
+                            <View key={file.id} style={styles.fileItem}>
+                              <View style={styles.fileInfo}>
+                                <FileText size={16} color="#6B7280" />
+                                <View style={styles.fileDetails}>
+                                  <StyledText style={styles.fileName}>
+                                    {file.name}
+                                  </StyledText>
+                                  <StyledText style={styles.fileMeta}>
+                                    {file.size} • {file.type}
+                                  </StyledText>
+                                </View>
                               </View>
                             </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    
+                          ))}
+                        </View>
+                      )}
+
                     <View style={styles.datesRow}>
                       <View style={styles.submissionRow}>
-                        <StyledText style={styles.dateLabel}>Created:</StyledText>
-                        <StyledText style={styles.dateValue}>{currentSubmissionDate || '30/01/2026'}</StyledText>
+                        <StyledText style={styles.dateLabel}>
+                          Created:
+                        </StyledText>
+                        <StyledText style={styles.dateValue}>
+                          {currentSubmissionDate || '30/01/2026'}
+                        </StyledText>
                       </View>
                       <View style={styles.submissionRow}>
-                        <StyledText style={styles.dateLabel}>Modified:</StyledText>
-                        <StyledText style={styles.dateValue}>{currentLastModifiedDate || '30/01/2026'}</StyledText>
+                        <StyledText style={styles.dateLabel}>
+                          Modified:
+                        </StyledText>
+                        <StyledText style={styles.dateValue}>
+                          {currentLastModifiedDate || '30/01/2026'}
+                        </StyledText>
                       </View>
                     </View>
                   </View>
@@ -707,26 +889,40 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                   // New/Not Submitted Design - Current design
                   <View>
                     <View style={styles.submissionRow}>
-                      <StyledText style={styles.submissionLabel}>Status:</StyledText>
+                      <StyledText style={styles.submissionLabel}>
+                        Status:
+                      </StyledText>
                       <View style={[styles.badge, styles.statusBadge]}>
                         <StyledText style={styles.badgeText}>new</StyledText>
                       </View>
                     </View>
                     <View style={styles.submissionRow}>
-                      <StyledText style={styles.submissionLabel}>Actions:</StyledText>
+                      <StyledText style={styles.submissionLabel}>
+                        Actions:
+                      </StyledText>
                       <View style={[styles.badge, styles.actionBadge]}>
-                        <StyledText style={styles.actionBadgeText}>Can Edit</StyledText>
+                        <StyledText style={styles.actionBadgeText}>
+                          Can Edit
+                        </StyledText>
                       </View>
                     </View>
-                    
+
                     <View style={styles.datesRow}>
                       <View style={styles.submissionRow}>
-                        <StyledText style={styles.dateLabel}>Created:</StyledText>
-                        <StyledText style={styles.dateValue}>30/01/2026</StyledText>
+                        <StyledText style={styles.dateLabel}>
+                          Created:
+                        </StyledText>
+                        <StyledText style={styles.dateValue}>
+                          30/01/2026
+                        </StyledText>
                       </View>
                       <View style={styles.submissionRow}>
-                        <StyledText style={styles.dateLabel}>Modified:</StyledText>
-                        <StyledText style={styles.dateValue}>30/01/2026</StyledText>
+                        <StyledText style={styles.dateLabel}>
+                          Modified:
+                        </StyledText>
+                        <StyledText style={styles.dateValue}>
+                          30/01/2026
+                        </StyledText>
                       </View>
                     </View>
                   </View>
@@ -744,7 +940,9 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
           <TouchableOpacity
             style={[styles.externalActionButton, styles.primaryExternalButton]}
             onPress={() => {
-              const openMoodleAction = actions.find(action => action.id === 'open-moodle');
+              const openMoodleAction = actions.find(
+                action => action.id === 'open-moodle',
+              );
               if (openMoodleAction) {
                 openMoodleAction.onPress();
               }
@@ -757,19 +955,21 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
               Open in Moodle
             </StyledText>
           </TouchableOpacity>
-          
+
           {/* Mark Complete Button */}
           <TouchableOpacity
             style={[styles.externalActionButton, styles.whiteExternalButton]}
             onPress={() => {
-              const markCompleteAction = actions.find(action => action.id === 'mark-complete');
+              const markCompleteAction = actions.find(
+                action => action.id === 'mark-complete',
+              );
               if (markCompleteAction) {
                 markCompleteAction.onPress();
               }
             }}
           >
             <View style={styles.buttonIcon}>
-              <CircleCheckBig  size={16} color="#111827" />
+              <CircleCheckBig size={16} color="#111827" />
             </View>
             <StyledText style={styles.whiteButtonText}>
               Mark Complete

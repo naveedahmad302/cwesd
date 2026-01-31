@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Dimensions, RefreshControl } from 'react-native';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Bell, Plus } from 'lucide-react-native';
 import StyledText from './StyledText';
 
@@ -18,6 +18,7 @@ interface CalendarProps {
   title?: string;
   subtitle?: string;
   onAddEvent?: () => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -25,10 +26,21 @@ const Calendar: React.FC<CalendarProps> = ({
   userType = 'student',
   title = 'Calendar',
   subtitle = 'Manage your schedule and upcoming events',
-  onAddEvent
+  onAddEvent,
+  onRefresh,
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (onRefresh) {
+      await Promise.resolve(onRefresh());
+      setRefreshing(false);
+    } else {
+      setTimeout(() => setRefreshing(false), 800);
+    }
+  }, [onRefresh]);
 
   // Format date for display
   const formatDate = (date: Date) => {
@@ -167,7 +179,12 @@ const Calendar: React.FC<CalendarProps> = ({
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={['#E56B8C']} />
+      }
+    >
       <View style={styles.header}>
         <View style={styles.headerText}>
           <StyledText style={styles.title}>Calendar</StyledText>
