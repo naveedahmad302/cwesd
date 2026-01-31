@@ -408,7 +408,7 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
                   title: assignment.name,
                   subtitle: 'Assignment',
                   type: 'assignment',
-                  isCompleted: false, // You might want to track completion status
+                  isCompleted: true, // You might want to track completion status
                   onPress: () => handleAssignmentPress(assignment),
                 };
                 return <ContentCard key={assignment.id} item={contentItem} />;

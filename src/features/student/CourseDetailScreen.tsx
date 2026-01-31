@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import StyledText from '../../shared/components/StyledText';
 import CourseSidebar from '../../shared/components/CourseSidebar';
-import ContentDetailCard, { ContentDetailAction } from '../../shared/components/ContentDetailCard';
+import ContentDetailCard, { ContentDetailAction, SubmittedFile } from '../../shared/components/ContentDetailCard';
 import QuizStartScreen from '../../shared/components/QuizStartScreen';
 import QuizResultsScreen from '../../shared/components/QuizResultsScreen';
+import { assignmentsAPI } from '../../services/api';
 import { MessageSquare, ExternalLink, Menu, CircleCheckBig, HelpCircle } from 'lucide-react-native';
 
 const CourseDetailScreen: React.FC = () => {
@@ -36,6 +37,8 @@ const CourseDetailScreen: React.FC = () => {
     type: 'quiz' | 'assignment' | 'lecture';
     title: string;
     description: string;
+    id?: string;
+    instance?: string;
     data?: any; // Store the original data for each content type
   } | null>(null);
 
@@ -67,6 +70,7 @@ const CourseDetailScreen: React.FC = () => {
       type: 'quiz',
       title: quiz.title,
       description: 'Take this quiz to test your knowledge',
+      id: quiz.id?.toString(),
       data: quiz
     });
   };
@@ -76,6 +80,8 @@ const CourseDetailScreen: React.FC = () => {
       type: 'assignment',
       title: assignment.name,
       description: 'Complete this assignment to demonstrate your understanding',
+      id: assignment.id?.toString(),
+      instance: assignment.instance?.toString(), // Add the instance field from API response
       data: assignment
     });
   };
@@ -85,9 +91,11 @@ const CourseDetailScreen: React.FC = () => {
       type: 'lecture',
       title: lecture.name,
       description: 'Watch this lecture to learn the key concepts',
+      id: lecture.id?.toString(),
       data: lecture
     });
   };
+
 
   const isQuizSubmitted = (quiz: any) => {
     // Check if the current user has submitted this quiz
@@ -117,6 +125,9 @@ const CourseDetailScreen: React.FC = () => {
   const handleBackToAnnouncements = () => {
     setSelectedContent(null);
   };
+
+
+
 
   const getQuizActions = (): ContentDetailAction[] => {
     const baseActions: ContentDetailAction[] = [
@@ -168,8 +179,7 @@ const CourseDetailScreen: React.FC = () => {
             id: 'submit',
             title: 'Submit Assignment',
             type: 'primary',
-            onPress: () => console.log('Submit assignment'),
-            icon: <MessageSquare size={16} color="#111827" />
+            onPress: () => console.log('Submit assignment')
           },
           ...baseActions
         ];
@@ -250,12 +260,26 @@ const CourseDetailScreen: React.FC = () => {
 
           {/* Content Card - Either Announcements or Content Detail */}
           {selectedContent ? (
-            <ContentDetailCard
-              title={selectedContent.title}
-              description={selectedContent.description}
-              type={selectedContent.type}
-              actions={getQuizActions()}
-            />
+            <>
+              <ContentDetailCard
+                title={selectedContent.title}
+                description={selectedContent.description}
+                type={selectedContent.type}
+                actions={getQuizActions()}
+                // For static usage (like your original example)
+                submissionStatus={selectedContent.type === 'assignment' ? 'new' : 'new'}
+                submittedFiles={selectedContent.type === 'assignment' ? [] : []}
+                submissionDate=""
+                lastModifiedDate=""
+                
+                // For dynamic API usage (uncomment to use real API data)
+                useDynamicData={selectedContent.type === 'assignment'}
+                moodleId={course?.moodleId?.toString() || course?.id?.toString() || "2"} // Use moodleId first, fallback to id
+                sectionNumber="1" // Replace with actual section number
+                instance={selectedContent.instance?.toString() || selectedContent.id?.toString() || "2"} // Use instance first, fallback to id
+                assignmentId={selectedContent.id?.toString() || "2"} // Pass the assignment ID (module ID) for request body
+              />
+            </>
           ) : (
             <View style={styles.announcementsCard}>
               <View style={styles.cardHeader}>
@@ -315,6 +339,8 @@ const CourseDetailScreen: React.FC = () => {
           moodleId={course?.moodleId?.toString()} // Use actual moodleId from course
         />
       )}
+      
+      
     </View>
   );
 };
