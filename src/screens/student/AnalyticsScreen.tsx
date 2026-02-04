@@ -1,95 +1,125 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import StyledText from '../../shared/components/StyledText';
-
+import { useGetAnalyticsQuery, useLazyGetAnalyticsQuery, type AnalyticsResponse } from '../../store/api';
+import { Loading, ErrorWithRetry } from '../../shared/components';
 import { LineChart, RadarChart, PieChart, BarChart } from "react-native-gifted-charts";
 
 
 
-const stats = [
-
-  {
-
-    title: 'Course Progress',
-    value: '65%',
-    icon: 'trending-up',
-
-  },
-
-  {
-
-    title: 'Avg Quiz Score',
-
-    value: '82%',
-
-    icon: 'emoji-events',
-
-  },
-
-  {
-
-    title: 'Study Time',
-
-    value: '24h',
-
-    icon: 'schedule',
-
-  },
-
-  {
-
-    title: 'Completion Rate',
-
-    value: '50%',
-
-    icon: 'radio-button-checked',
-
-  },
-
-];
-
-
-
-const progressData = [
-
-  { value: 15 },
-
-  { value: 30 },
-
-  { value: 26 },
-
-  { value: 40 },
-
-  { value: 8 },
-
-  { value: 2 },
-
-];
-
-
-
-const radarData = [62, 70, 58, 64, 68];
-
-const radarLabels = ['Technical', 'Business', 'Marketing', 'Finance', 'Leadership'];
 
 
 
 const AnalyticsScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = useCallback(() => {
+  const {
+    data: analyticsData,
+    isLoading: loading,
+    isFetching,
+    isError,
+    error: queryError,
+    refetch,
+  } = useGetAnalyticsQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
+  const [triggerAnalytics] = useLazyGetAnalyticsQuery();
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  // Map API data to stats format
+  const getStats = () => {
+    if (!analyticsData?.data) return [];
+    
+    const { course, quizzes } = analyticsData.data;
+    
+    return [
+      {
+        title: 'Course Progress',
+        value: `${course.progressPercentage}%`,
+        icon: 'trending-up',
+      },
+      {
+        title: 'Avg Quiz Score',
+        value: `${quizzes.avgQuizPercentage}%`,
+        icon: 'emoji-events',
+      },
+      {
+        title: 'Activities',
+        value: `${course.completedActivities}/${course.totalActivities}`,
+        icon: 'assignment',
+      },
+      {
+        title: 'Quizzes',
+        value: `${quizzes.totalQuizzesGiven - quizzes.remainingQuizzes}/${quizzes.totalQuizzesGiven}`,
+        icon: 'radio-button-checked',
+      },
+    ];
+  };
+
+  // Generate progress data from sections
+  const getProgressData = () => {
+    if (!analyticsData?.data?.sections) return [];
+    
+    return analyticsData.data.sections
+      .filter((section: any) => section.totalActivities > 0)
+      .map((section: any) => ({
+        value: Math.round((section.completedActivities / section.totalActivities) * 100)
+      }));
+  };
+
+  // Generate radar data from quiz performance
+  const getRadarData = () => {
+    if (!analyticsData?.data) return [];
+    
+    const { course, quizzes } = analyticsData.data;
+    
+    // Create mock radar data based on available metrics
+    return [
+      course.progressPercentage, // Course completion
+      quizzes.avgQuizPercentage, // Quiz performance
+      Math.round((course.completedActivities / course.totalActivities) * 100), // Activity completion
+      quizzes.totalQuizzesGiven > 0 ? Math.round((quizzes.totalQuizAttempts / quizzes.totalQuizzesGiven) * 100) : 0, // Attempt rate
+      course.progressPercentage > 50 ? 70 : 45, // Engagement (estimated)
+    ];
+  };
+
+  const stats = getStats();
+  const progressData = getProgressData();
+  const radarData = getRadarData();
+  const radarLabels = ['Progress', 'Quizzes', 'Activities', 'Attempts', 'Engagement'];
+
+  if (loading) {
+    return <Loading isLoading={loading} overlay={false} />;
+  }
+
+  if (isError) {
+    return (
+      <ErrorWithRetry
+        message={(queryError as any)?.message ?? 'Failed to load analytics'}
+        onRetry={onRefresh}
+      />
+    );
+  }
 
   return (
     <ScrollView
       contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#E56B8C']} />
+        <RefreshControl
+          refreshing={refreshing || isFetching}
+          onRefresh={onRefresh}
+          colors={['#E56B8C']}
+        />
       }
     >
 
@@ -183,13 +213,17 @@ const AnalyticsScreen = () => {
 
           <View style={styles.footerTitleRow}>
 
-            <StyledText style={styles.footerTitle}>Real-time progress data</StyledText>
+            <StyledText style={styles.footerTitle}>
+              {analyticsData?.data ? `${analyticsData.data.course.progressPercentage}% progress` : 'Real-time progress data'}
+            </StyledText>
 
             <Icon name="trending-up" size={16} color="#1A1A1A" />
 
           </View>
 
-          <StyledText style={styles.footerSubtitle}>Updated automatically</StyledText>
+          <StyledText style={styles.footerSubtitle}>
+            {analyticsData?.data ? `${analyticsData.data.course.completedActivities} of ${analyticsData.data.course.totalActivities} activities completed` : 'Updated automatically'}
+          </StyledText>
 
         </View>
 
@@ -197,37 +231,7 @@ const AnalyticsScreen = () => {
 
 
 
-      <View style={styles.radarCard}>
-
-        <StyledText style={styles.radarTitle}>Skills Assessment</StyledText>
-
-        <StyledText style={styles.radarSubtitle}>Your performance vs class average</StyledText>
-
-        <View style={styles.radarChartWrapper}>
-
-          <RadarChart
-            data={[42, 50, 38, 45, 48]}
-            labels={['Technical', 'Business', 'Marketing', 'Finance', 'Leadership']}
-            maxValue={60}
-          />
-
-        </View>
-
-        <View style={styles.footerRow}>
-
-          <View style={styles.footerTitleRow}>
-
-            <StyledText style={styles.footerTitle}>Above average in all skills</StyledText>
-
-            <Icon name="person" size={16} color="#1A1A1A" />
-
-          </View>
-
-          <StyledText style={styles.footerSubtitle}>Across 5 skill areas</StyledText>
-
-        </View>
-
-      </View>
+      
 
       <View style={styles.moduleCard}>
         <StyledText style={styles.moduleTitle}>Module Completion</StyledText>
@@ -241,10 +245,14 @@ const AnalyticsScreen = () => {
         </View>
         <View style={styles.footerRow}>
           <View style={styles.footerTitleRow}>
-            <StyledText style={styles.footerTitle}>Intro leads at 92%</StyledText>
+            <StyledText style={styles.footerTitle}>
+              {analyticsData?.data ? `${analyticsData.data.course.progressPercentage}% completion rate` : 'Intro leads at 92%'}
+            </StyledText>
             <Icon name="trending-up" size={16} color="#1A1A1A" />
           </View>
-          <StyledText style={styles.footerSubtitle}>Live completion data</StyledText>
+          <StyledText style={styles.footerSubtitle}>
+            {analyticsData?.data ? `${analyticsData.data.sections.length} sections tracked` : 'Live completion data'}
+          </StyledText>
         </View>
       </View>
 
@@ -282,10 +290,14 @@ const AnalyticsScreen = () => {
         </View>
         <View style={styles.footerRow}>
           <View style={styles.footerTitleRow}>
-            <StyledText style={styles.footerTitle}>38 hours this month</StyledText>
+            <StyledText style={styles.footerTitle}>
+              {analyticsData?.data ? `${analyticsData.data.course.completedActivities} activities completed` : '38 hours this month'}
+            </StyledText>
             <Icon name="access-time" size={16} color="#1A1A1A" />
           </View>
-          <StyledText style={styles.footerSubtitle}>217% increase from January</StyledText>
+          <StyledText style={styles.footerSubtitle}>
+            {analyticsData?.data ? `${analyticsData.data.course.remainingActivities} remaining` : '217% increase from January'}
+          </StyledText>
         </View>
       </View>
 
@@ -333,10 +345,14 @@ const AnalyticsScreen = () => {
         </View>
         <View style={styles.footerRow}>
           <View style={styles.footerTitleRow}>
-            <StyledText style={styles.footerTitle}>84% completion rate</StyledText>
+            <StyledText style={styles.footerTitle}>
+              {analyticsData?.data ? `${analyticsData.data.quizzes.totalQuizzesGiven} quizzes available` : '84% completion rate'}
+            </StyledText>
             <Icon name="bookmark" size={16} color="#1A1A1A" />
           </View>
-          <StyledText style={styles.footerSubtitle}>Strong completion rates</StyledText>
+          <StyledText style={styles.footerSubtitle}>
+            {analyticsData?.data ? `${analyticsData.data.quizzes.remainingQuizzes} remaining` : 'Strong completion rates'}
+          </StyledText>
         </View>
       </View>
 
@@ -355,7 +371,23 @@ const AnalyticsScreen = () => {
         </View>
         <View style={styles.dualLineContainer}>
           <BarChart
-            data={[
+            data={analyticsData?.data?.sections ? analyticsData.data.sections
+              .filter((section: any) => section.totalActivities > 0)
+              .map((section: any, index: any) => [
+                {
+                  value: Math.round((section.completedActivities / section.totalActivities) * 100),
+                  label: `Sec ${section.sectionNumber}`,
+                  spacing: 2,
+                  labelWidth: 30,
+                  labelTextStyle: {color: 'gray'},
+                  frontColor: '#4CAF50'
+                },
+                {
+                  value: Math.round(((section.totalActivities - section.completedActivities) / section.totalActivities) * 100),
+                  frontColor: '#FF9800'
+                }
+              ])
+              .flat() : [
               {value: 65, label: 'Jan', spacing: 2, labelWidth: 30, labelTextStyle: {color: 'gray'}, frontColor: '#4CAF50'},
               {value: 35, frontColor: '#FF9800'},
               {value: 72, label: 'Feb', spacing: 2, labelWidth: 30, labelTextStyle: {color: 'gray'}, frontColor: '#4CAF50'},
@@ -432,7 +464,41 @@ const AnalyticsScreen = () => {
           <StyledText style={styles.footerSubtitle}>Strong upward trend</StyledText>
         </View>
       </View>
+      <View style={styles.radarCard}>
 
+        <StyledText style={styles.radarTitle}>Skills Assessment</StyledText>
+
+        <StyledText style={styles.radarSubtitle}>Your performance vs class average</StyledText>
+
+        <View style={styles.radarChartWrapper}>
+
+          <RadarChart
+            data={[42, 50, 38, 45, 48]}
+            labels={['Technical', 'Business', 'Marketing', 'Finance', 'Leadership']}
+            maxValue={60}
+          />
+
+        </View>
+
+        <View style={styles.footerRow}>
+
+          <View style={styles.footerTitleRow}>
+
+            <StyledText style={styles.footerTitle}>
+              {analyticsData?.data ? `Performance across ${analyticsData.data.sections.length} sections` : 'Above average in all skills'}
+            </StyledText>
+
+            <Icon name="person" size={16} color="#1A1A1A" />
+
+          </View>
+
+          <StyledText style={styles.footerSubtitle}>
+            {analyticsData?.data ? `${analyticsData.data.course.totalActivities} total activities` : 'Across 5 skill areas'}
+          </StyledText>
+
+        </View>
+
+      </View>
     </ScrollView>
   );
 };

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   RefreshControl,
+  
 } from 'react-native';
 import { Award, Calendar, Download, CircleCheckBig, Lock } from 'lucide-react-native';
 import StyledText from '../../shared/components/StyledText';
@@ -192,7 +193,10 @@ const CertificatesScreen: React.FC<CourseProgressScreenProps> = () => {
         <CourseProgressHeader />
 
         <View style={styles.certificatesContainer}>
-          <StyledText style={styles.moduleCertificatesTitle}>Module Certificates</StyledText>
+          <View style={styles.headerRow}>
+            <Award size={24} color="black" />
+            <StyledText style={styles.moduleCertificatesTitle}>Section Certificates</StyledText>
+          </View>
           <FlatList
             data={memoizedData}
             renderItem={renderItem}
@@ -282,11 +286,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 24,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
   moduleCertificatesTitle: {
     fontSize: 20,
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 12,
+    // marginBottom: 12,
   },
   certificateItem: {
     backgroundColor: '#FFFFFF',

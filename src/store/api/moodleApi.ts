@@ -17,6 +17,15 @@ export const moodleApi = createApi({
       query: moodleId => ({ url: API_ENDPOINTS.MOODLE.COURSE_SECTIONS(moodleId) }),
       providesTags: (_result, _error, moodleId) => [{ type: 'Moodle', id: moodleId }],
     }),
+    getCourseSectionContents: build.query<any, { courseId: string; sectionNumber: string }>({
+      query: ({ courseId, sectionNumber }) => ({ 
+        url: API_ENDPOINTS.MOODLE.COURSE_SECTION_CONTENTS(courseId, sectionNumber) 
+      }),
+      providesTags: (_result, _error, { courseId, sectionNumber }) => [{ 
+        type: 'Moodle', 
+        id: `${courseId}-${sectionNumber}-contents` 
+      }],
+    }),
     getMySubmission: build.query<
       AssignmentSubmissionResponse,
       { moodleId: string; sectionNumber: string; instance: string }
@@ -53,15 +62,20 @@ export const moodleApi = createApi({
     }),
     submitAssignment: build.mutation<
       { success?: boolean; message?: string; data?: { status?: string; submittedAt?: string } },
-      { moodleId: string; sectionNumber: string; instance: string; data: AssignmentDraftSubmitPayload }
+      { moodleId: string; sectionNumber: string; instance: string; data: AssignmentDraftSubmitPayload; params?: { id?: string } }
     >({
-      query: ({ moodleId, sectionNumber, instance, data }) => ({
-        url: API_ENDPOINTS.MOODLE.ASSIGNMENT_SUBMIT(moodleId, sectionNumber, instance),
-        method: 'POST',
-        body: data,
-        formData: true,
-        forceFormData: true,
-      }),
+      query: ({ moodleId, sectionNumber, instance, data, params }) => {
+        const baseUrl = API_ENDPOINTS.MOODLE.ASSIGNMENT_SUBMIT(moodleId, sectionNumber, instance);
+        const url = params?.id ? `${baseUrl}?id=${params.id}` : baseUrl;
+        
+        return {
+          url,
+          method: 'POST',
+          body: data,
+          formData: true,
+          forceFormData: true,
+        };
+      },
       invalidatesTags: (_result, _error, { moodleId, sectionNumber, instance }) => [
         { type: 'Moodle', id: `${moodleId}-${sectionNumber}-${instance}` },
       ],
@@ -72,6 +86,8 @@ export const moodleApi = createApi({
 export const {
   useGetCourseSectionsQuery,
   useLazyGetCourseSectionsQuery,
+  useGetCourseSectionContentsQuery,
+  useLazyGetCourseSectionContentsQuery,
   useGetMySubmissionQuery,
   useLazyGetMySubmissionQuery,
   useGetSubmissionsQuery,

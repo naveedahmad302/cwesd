@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 400,
+    width: 300,
     height: '100%',
     backgroundColor: '#F9FAFB',
     // shadowColor: '#000',

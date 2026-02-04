@@ -1,4 +1,4 @@
-export interface ApiUser {
+export interface ApiUserList {
   _id: string;
   name: string;
   email?: string;
@@ -11,7 +11,7 @@ export interface ApiUser {
 
 export interface UsersListResponse {
   success?: boolean;
-  data: ApiUser[];
+  data: ApiUserList[];
 }
 
 export interface UpdateProfilePayload {

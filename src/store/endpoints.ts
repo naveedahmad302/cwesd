@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
     STUDENTS: '/users/students',
     ADMINS: '/users/admins',
     UPDATE_PROFILE: (userId: string) => `/users/update/${userId}`,
+    ANALYTICS: '/users/analytics',
   },
 
   COURSES: '/courses',
@@ -27,6 +28,7 @@ export const API_ENDPOINTS = {
 
   MOODLE: {
     COURSE_SECTIONS: (moodleId: string) => `/moodle/courses/${moodleId}/sections`,
+    COURSE_SECTION_CONTENTS: (courseId: string, sectionNumber: string) => `/moodle/courses/${courseId}/section-number/${sectionNumber}/contents`,
     ASSIGNMENT_MY_SUBMISSION: (moodleId: string, sectionNumber: string, instance: string) =>
       `/moodle/courses/${moodleId}/sections/${sectionNumber}/assignments/${instance}/my-submission`,
     ASSIGNMENT_SUBMISSIONS: (moodleId: string, sectionNumber: string, instance: string) =>
@@ -50,5 +52,9 @@ export const API_ENDPOINTS = {
 
   TEACHER: {
     STATS: '/teacher/stats',
+  },
+
+  EVENTS: {
+    BY_COURSE: (courseId: string) => `/events?courseId/${courseId}`,
   },
 };

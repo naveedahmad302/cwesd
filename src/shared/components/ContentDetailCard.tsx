@@ -19,6 +19,7 @@ import {
   useLazyGetMySubmissionQuery,
   useDraftAssignmentMutation,
   useSubmitAssignmentMutation,
+  useLazyGetCourseSectionContentsQuery,
 } from '../../store/api';
 import { transformSubmissionData } from '../../utils/moodle';
 import * as DocumentPicker from '@react-native-documents/picker';
@@ -55,7 +56,7 @@ export interface ContentDetailCardProps {
   moodleId?: string;
   sectionNumber?: string;
   instance?: string;
-  assignmentId?: string; // Add assignment ID for request body
+  assignmentId?: string; // Add assignment ID for request body (module id from contents API)
   useDynamicData?: boolean;
 }
 
@@ -71,7 +72,7 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
   moodleId,
   sectionNumber,
   instance,
-  // assignmentId,
+  assignmentId, // Module id from contents API
   useDynamicData = false,
 }) => {
   const [dynamicSubmissionData, setDynamicSubmissionData] = useState({
@@ -83,11 +84,59 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
   const [rawSubmissionData, setRawSubmissionData] = useState<unknown>(null);
   const [getMySubmission, { isLoading, isUninitialized }] =
     useLazyGetMySubmissionQuery();
+  const [getCourseSectionContents] = useLazyGetCourseSectionContentsQuery();
   const [draftAssignment] = useDraftAssignmentMutation();
   const [submitAssignmentMutation] = useSubmitAssignmentMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isLoadingSubmission =
     isLoading || (isUninitialized === false && isLoading);
+
+  // Function to find assignment module ID from contents API
+  const findAssignmentModuleId = async () => {
+    if (!moodleId || !sectionNumber || !instance) {
+      console.log('Missing parameters for finding assignment module ID');
+      return null;
+    }
+
+    try {
+      console.log('=== FETCHING COURSE CONTENTS ===');
+      console.log('Course ID:', moodleId);
+      console.log('Section Number:', sectionNumber);
+      console.log('Looking for instance:', instance);
+
+      const contentsResponse = await getCourseSectionContents({
+        courseId: moodleId,
+        sectionNumber: sectionNumber,
+      }).unwrap();
+
+      console.log('Contents response:', contentsResponse);
+
+      if (contentsResponse?.success && contentsResponse?.data?.modules) {
+        const assignmentModule = contentsResponse.data.modules.find(
+          (module: any) => 
+            module.modname === 'assign' && 
+            module.instance.toString() === instance.toString()
+        );
+
+        if (assignmentModule) {
+          console.log('=== FOUND ASSIGNMENT MODULE ===');
+          console.log('Module ID:', assignmentModule.id);
+          console.log('Module Name:', assignmentModule.name);
+          console.log('Instance:', assignmentModule.instance);
+          return assignmentModule.id.toString();
+        } else {
+          console.log('Assignment module not found for instance:', instance);
+          return null;
+        }
+      } else {
+        console.log('Invalid contents response');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching course contents:', error);
+      return null;
+    }
+  };
 
   const fetchSubmissionData = useCallback(async () => {
     if (!moodleId || !sectionNumber || !instance) {
@@ -104,6 +153,9 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
       sectionNumber,
       instance,
     });
+    console.log('=== MY-SUBMISSION API REQUEST ===');
+    console.log('URL:', `/moodle/courses/${moodleId}/sections/${sectionNumber}/assignments/${instance}/my-submission`);
+    console.log('=== END MY-SUBMISSION REQUEST ===');
     try {
       const data = await getMySubmission({
         moodleId,
@@ -132,6 +184,16 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
         message: err?.message,
         code: err?.code,
       });
+
+      // Specific network error handling
+      if (err?.message?.includes('Network request failed')) {
+        console.log('🌐 NETWORK ERROR: Unable to reach the API server');
+        console.log('Possible causes:');
+        console.log('1. Server is down or not responding');
+        console.log('2. No internet connection');
+        console.log('3. API endpoint URL is incorrect');
+        console.log('4. CORS or firewall issues');
+      }
 
       if (err?.status === 500) {
         console.log('Server error - using default submission status');
@@ -177,6 +239,9 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
 
   const handleDocumentPicker = async () => {
     try {
+      // Add a small delay to ensure any previous UI operations are complete
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 100));
+      
       const result = await DocumentPicker.pick({
         presentationStyle: 'fullScreen',
         type: [DocumentPicker.types.pdf],
@@ -245,12 +310,6 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
           uri: newFile.uri,
         });
 
-        // Show success message for file selection
-        Alert.alert(
-          'File Selected',
-          `File "${pickedFile.name}" selected successfully!`,
-        );
-
         // Update the submitted files immediately for better UX
         const updatedFiles = [...currentSubmittedFiles, newFile];
 
@@ -262,12 +321,33 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
           }));
         }
 
-        // Submit the assignment with the file data
-        await submitAssignment([newFile], fileData);
+        // Save the assignment as draft with the file data
+        await saveDraftAssignment([newFile], fileData);
       }
     } catch (error: any) {
       if (error.code === 'DOCUMENT_PICKER_CANCELED') {
         console.log('User cancelled document picker');
+      } else if (error.message && error.message.includes('Current activity is null')) {
+        console.error('Activity null error:', error);
+        Alert.alert(
+          'Error',
+          'Unable to open file picker. Please try again.',
+          [
+            {
+              text: 'Retry',
+              onPress: () => {
+                // Retry after a short delay
+                setTimeout(() => {
+                  handleDocumentPicker();
+                }, 500);
+              },
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+          ]
+        );
       } else {
         console.error('Document picker error:', error);
         Alert.alert('Error', `Failed to pick document: ${error.message}`);
@@ -275,44 +355,35 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
     }
   };
 
-  const submitAssignment = async (files: SubmittedFile[], fileData?: any) => {
-    console.log('Submitting assignment with:', {
+  const saveDraftAssignment = async (files: SubmittedFile[], fileData?: any) => {
+    console.log('Saving draft assignment with:', {
       moodleId,
       sectionNumber,
       instance,
       files: files.length,
     });
 
-    // Check if submission is allowed based on current status
-    if (currentSubmissionStatus === 'submitted' && !isLoadingSubmission) {
-      Alert.alert(
-        'Already Submitted',
-        'This assignment has already been submitted. You may need to edit the existing submission instead of creating a new one.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Refresh to show current submission status
-              fetchSubmissionData();
-            },
-          },
-        ],
-      );
-      return;
-    }
+    // Find the assignment module ID from contents API
+    const moduleAssignmentId = await findAssignmentModuleId();
+    const finalAssignmentId = assignmentId || moduleAssignmentId;
+    
+    console.log('Using assignment ID:', {
+      prop: assignmentId,
+      fromAPI: moduleAssignmentId,
+      final: finalAssignmentId,
+    });
 
     if (!moodleId || !sectionNumber || !instance) {
-      console.log('Missing required parameters for submission');
+      console.log('Missing required parameters for draft');
       Alert.alert(
         'Demo Mode',
-        'File selected successfully. In production, this would be submitted to the server.',
+        'File selected successfully. In production, this would be saved as a draft.',
       );
-      // Simulate successful submission in demo mode
+      // Simulate successful draft save in demo mode
       if (useDynamicData) {
         setDynamicSubmissionData(prev => ({
           ...prev,
-          submissionStatus: 'submitted',
-          submissionDate: new Date().toLocaleDateString(),
+          submissionStatus: 'draft',
           lastModifiedDate: new Date().toLocaleDateString(),
         }));
       }
@@ -321,133 +392,259 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
 
     setIsSubmitting(true);
     try {
-      // Create FormData for file upload - exactly like Postman form-data
+      // Create FormData for file upload
       const formData = new FormData();
 
       // Add file (required field)
       if (files.length > 0) {
         const file = files[0];
+        formData.append('file', {
+          uri: file.uri,
+          type: file.type,
+          name: file.name,
+        } as any);
+      }
 
+      // Add required form fields
+      formData.append(
+        'displayName',
+        `Assignment Draft - ${new Date().toLocaleDateString()}`,
+      );
+      
+      // Add assignment ID if available (module id from contents API)
+      if (finalAssignmentId) {
+        formData.append('id', finalAssignmentId);
+        console.log('Added assignment ID to draft FormData:', finalAssignmentId);
+      }
+      
+      // Also add instance for compatibility
+      if (instance) {
+        formData.append('instance', instance);
+      }
+
+      console.log('Saving draft to API...');
+      const payload = { moodleId, sectionNumber, instance, data: formData };
+      const result = await draftAssignment(payload).unwrap();
+
+      console.log('Draft save response:', result);
+
+      if (result?.success) {
+        if (useDynamicData) {
+          setDynamicSubmissionData(prev => ({
+            ...prev,
+            submissionStatus: 'draft',
+            lastModifiedDate: new Date().toLocaleDateString(),
+          }));
+        }
+
+        Alert.alert(
+          'Success',
+          'Assignment saved as draft successfully!',
+        );
+        fetchSubmissionData();
+      } else {
+        throw new Error(result?.message || 'Failed to save draft');
+      }
+    } catch (error: unknown) {
+      const err = error as {
+        status?: number;
+        data?: { message?: string };
+        message?: string;
+        code?: string;
+      };
+      console.error('Draft save error:', error);
+
+      if (err?.code === 'FETCH_ERROR' || err?.message?.includes('Network')) {
+        Alert.alert(
+          'Demo Mode',
+          'Server is not available. File saved as draft for demo purposes.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                if (useDynamicData) {
+                  setDynamicSubmissionData(prev => ({
+                    ...prev,
+                    submissionStatus: 'draft',
+                    lastModifiedDate: new Date().toLocaleDateString(),
+                  }));
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          (err?.data as { message?: string })?.message ||
+            'Failed to save draft. Please try again.',
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const submitFinalAssignment = async () => {
+    // Show confirmation dialog before final submission
+    Alert.alert(
+      'Confirm Submission',
+      'Are you sure you want to submit this assignment? You will not be able to make changes after submission.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Submit',
+          style: 'destructive',
+          onPress: async () => {
+            await submitAssignment(currentSubmittedFiles, null);
+          },
+        },
+      ]
+    );
+  };
+
+  const submitAssignment = async (files: SubmittedFile[], fileData?: any) => {
+    console.log('Submit assignment called with:', {
+      moodleId,
+      sectionNumber,
+      instance,
+      files: files.length,
+    });
+
+    // Find the assignment module ID from contents API
+    const moduleAssignmentId = await findAssignmentModuleId();
+    const finalAssignmentId = assignmentId || moduleAssignmentId;
+    
+    console.log('Using assignment ID for submission:', {
+      prop: assignmentId,
+      fromAPI: moduleAssignmentId,
+      final: finalAssignmentId,
+    });
+
+    // First, check if there's an existing submission
+    if (!moodleId || !sectionNumber || !instance) {
+      console.log('Missing required parameters for submission');
+      Alert.alert(
+        'Demo Mode',
+        'File selected successfully. In production, this would be submitted to the server.',
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Check existing submission first
+      console.log('=== CHECKING EXISTING SUBMISSION ===');
+      const existingSubmission = await getMySubmission({
+        moodleId,
+        sectionNumber,
+        instance,
+      }).unwrap();
+
+      console.log('Existing submission found:', existingSubmission);
+
+      let formData = new FormData();
+
+      if (existingSubmission?.success && existingSubmission.hasSubmission && existingSubmission.submittedFiles?.length > 0) {
+        console.log('=== USING EXISTING FILE ===');
+        // Use existing file from submission
+        const existingFile = existingSubmission.submittedFiles[0];
+        console.log('Re-submitting existing file:', existingFile);
+        
+        // Map the API response fields to the expected format
+        const fileName = existingFile.filename || existingFile.name || 'document.pdf';
+        const fileUrl = existingFile.fileurl || existingFile.url;
+        const fileType = existingFile.mimetype || existingFile.type || 'application/pdf';
+        
+        console.log('Mapped file data:', {
+          name: fileName,
+          url: fileUrl,
+          type: fileType,
+        });
+        
+        // Add existing file info (backend should handle file retrieval)
+        formData.append('file', {
+          uri: fileUrl,
+          type: fileType,
+          name: decodeURIComponent(fileName),
+        } as any);
+        
+        Alert.alert(
+          'Existing File Found',
+          `Using existing file: ${decodeURIComponent(fileName)}`,
+        );
+      } else {
+        console.log('=== USING NEW FILE ===');
+        // Use new file provided by user
+        if (files.length === 0) {
+          throw new Error('No file provided for submission');
+        }
+
+        const file = files[0];
         console.log('=== PRE-UPLOAD FILE VALIDATION ===');
         console.log('File URI before upload:', file.uri);
         console.log('File name:', file.name);
         console.log('File type:', file.type);
         console.log('File data type:', typeof fileData);
 
-        // // Use the fileData if available (File object), otherwise use URI method
-        // if (fileData instanceof File) {
-        //   console.log('=== USING FILE OBJECT ===');
-        //   formData.append('file', fileData, fileData.name);
-        // } else {
-        console.log('=== USING URI METHOD ===');
-        // React Native file upload format - works with both file:// and content://
         formData.append('file', {
           uri: file.uri,
           type: file.type,
           name: file.name,
         } as any);
-        // }
-
-        console.log('=== FILE ADDED TO FORMDATA ===');
       }
 
-      // Add required form fields (exactly matching Postman)
+      // Add required form fields
       formData.append(
         'displayName',
         `Assignment Submission - ${new Date().toLocaleDateString()}`,
       );
+      
+      // Add assignment ID if available (module id from contents API)
+      if (finalAssignmentId) {
+        formData.append('id', finalAssignmentId);
+        console.log('Added assignment ID to FormData:', finalAssignmentId);
+      }
+      
+      // Also add instance for compatibility
+      if (instance) {
+        formData.append('instance', instance);
+      }
 
-      // Debug: Log FormData structure
-      console.log('=== FORM DATA STRUCTURE ===');
-      console.log(
-        'displayName:',
-        `Assignment Submission - ${new Date().toLocaleDateString()}`,
-      );
-      console.log(
-        'File details:',
-        files.length > 0
-          ? {
-              name: files[0].name,
-              type: files[0].type,
-              uri: files[0].uri,
-            }
-          : 'No file',
-      );
-      console.log('FormData ready for upload (Postman style)');
-
-      console.log('Submitting to API...');
-
-      const payload = { moodleId, sectionNumber, instance, data: formData };
-      let result: {
-        success?: boolean;
-        message?: string;
-        data?: { status?: string; submittedAt?: string } | unknown;
+      console.log('=== DIRECT SUBMISSION ===');
+      console.log('URL:', `/moodle/courses/${moodleId}/sections/${sectionNumber}/assignments/${instance}/submit`);
+      console.log('Method: POST');
+      console.log('FormData contents:');
+      try {
+        (formData as any)._parts?.forEach(([key, value]: [string, any]) => {
+          console.log(`  ${key}:`, value);
+        });
+      } catch (e) {
+        console.log('  FormData: (Unable to enumerate entries)');
+      }
+      
+      // Additional logging to verify FormData
+      console.log('=== FORMDATA VERIFICATION ===');
+      console.log('FormData type:', typeof formData);
+      console.log('FormData entries count:', (formData as any)._parts?.length || 0);
+      console.log('Final assignment ID being sent:', finalAssignmentId);
+      console.log('=== END FORMDATA VERIFICATION ===');
+      
+      console.log('=== END DIRECT SUBMISSION ===');
+      
+      const payload = { 
+        moodleId, 
+        sectionNumber, 
+        instance, 
+        data: formData,
+        // Add assignment ID as fallback in case FormData parsing fails
+        params: finalAssignmentId ? { id: finalAssignmentId } : undefined
       };
-
-      if (currentSubmissionStatus === 'draft') {
-        console.log('11111 Editing existing draft...', formData);
-        result = await draftAssignment(payload).unwrap();
-        console.log('2222 Draft updated response:', result);
-
-        if (result?.success) {
-          Alert.alert('Success', 'Draft updated successfully!');
-          fetchSubmissionData();
-        } else {
-          throw new Error(result?.message || 'Failed to update draft');
-        }
-        return;
-      }
-
-      if (
-        currentSubmissionStatus === 'new' &&
-        currentSubmittedFiles.length === 0
-      ) {
-        const hasExistingSubmission =
-          (rawSubmissionData as { hasSubmission?: boolean })?.hasSubmission ===
-          true;
-
-        if (hasExistingSubmission) {
-          console.log('Existing submission detected, creating draft first...');
-          try {
-            const draftResult = await draftAssignment(payload).unwrap();
-            if (draftResult?.success) {
-              result = await submitAssignmentMutation(payload).unwrap();
-            } else {
-              throw new Error(draftResult?.message || 'Failed to create draft');
-            }
-          } catch (draftError: unknown) {
-            const e = draftError as {
-              status?: number;
-              data?: unknown;
-              message?: string;
-              code?: string;
-            };
-            console.error('Draft API error details:', {
-              status: e?.status,
-              data: e?.data,
-              message: e?.message,
-              code: e?.code,
-            });
-            if (e?.data)
-              console.error(
-                'Server error response:',
-                JSON.stringify(e.data, null, 2),
-              );
-            throw draftError;
-          }
-        } else {
-          console.log('New submission, submitting directly...');
-          result = await submitAssignmentMutation(payload).unwrap();
-        }
-      } else {
-        console.log('Creating draft first...');
-        const draftResult = await draftAssignment(payload).unwrap();
-        if (draftResult?.success) {
-          result = await submitAssignmentMutation(payload).unwrap();
-        } else {
-          throw new Error(draftResult?.message || 'Failed to create draft');
-        }
-      }
+      const result = await submitAssignmentMutation(payload).unwrap();
+      console.log('Assignment submitted successfully:', result);
 
       console.log('Submission response:', result);
 
@@ -647,17 +844,27 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
           ? 'Edit Assignment'
           : isSubmitted
           ? 'View Submission'
-          : action.title,
+          : 'Upload Assignment',
         onPress: isSubmitted
           ? () => {
               // For submitted assignments, just show the submission details
               console.log('Viewing submitted assignment');
             }
+          : isDraft
+          ? handleDocumentPicker
           : handleDocumentPicker,
       };
     }
     return action;
   });
+
+  // Add final submit action for draft assignments
+  const finalSubmitAction: ContentDetailAction = {
+    id: 'final-submit',
+    title: 'Submit Assignment',
+    type: 'primary',
+    onPress: submitFinalAssignment,
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -710,7 +917,7 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                     {isSubmitting && action.id === 'submit'
                       ? currentSubmissionStatus === 'draft'
                         ? 'Updating...'
-                        : 'Submitting...'
+                        : 'Uploading...'
                       : action.title}
                   </StyledText>
                   {isSubmitting && action.id === 'submit' && (
@@ -722,6 +929,29 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                   )}
                 </TouchableOpacity>
               ))}
+            
+            {/* Show final submit button for draft assignments */}
+            {currentSubmissionStatus === 'draft' && (
+              <TouchableOpacity
+                style={[styles.assignmentButton, styles.finalSubmitButton]}
+                onPress={finalSubmitAction.onPress}
+                disabled={isSubmitting}
+              >
+                <View style={styles.buttonIcon}>
+                  <CircleCheckBig size={16} color="#ffffff" />
+                </View>
+                <StyledText style={styles.primaryButtonText}>
+                  {isSubmitting ? 'Submitting...' : finalSubmitAction.title}
+                </StyledText>
+                {isSubmitting && (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                    style={styles.buttonLoading}
+                  />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -837,7 +1067,7 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                       </StyledText>
                       <View style={[styles.badge, styles.actionBadge]}>
                         <StyledText style={styles.actionBadgeText}>
-                          Can Edit
+                          Ready to Submit
                         </StyledText>
                       </View>
                     </View>
@@ -883,6 +1113,12 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                           {currentLastModifiedDate || '30/01/2026'}
                         </StyledText>
                       </View>
+                    </View>
+                    
+                    <View style={styles.draftNotice}>
+                      <StyledText style={styles.draftNoticeText}>
+                        💡 Your assignment is saved as draft. Click "Submit Assignment" button below to submit it.
+                      </StyledText>
                     </View>
                   </View>
                 ) : (
@@ -1050,6 +1286,13 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: '#E56B8C',
     shadowColor: '#E56B8C',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  finalSubmitButton: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
@@ -1251,6 +1494,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#92400E',
+  },
+  draftNotice: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  draftNoticeText: {
+    fontSize: 13,
+    color: '#1E40AF',
+    lineHeight: 18,
   },
   noActionsText: {
     fontSize: 12,

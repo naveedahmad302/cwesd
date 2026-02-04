@@ -1,7 +1,33 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
-import type { UsersListResponse, UpdateProfilePayload } from '../../types/users.types';
+import type { UsersListResponse, UpdateProfilePayload, ApiUserList } from '../../types/users.types';
 import { API_ENDPOINTS } from '../endpoints';
 import { baseQueryWithReauth } from './middleware';
+
+export interface AnalyticsResponse {
+  success: boolean;
+  data: {
+    course: {
+      courseId: string;
+      moodleId: number;
+      totalActivities: number;
+      completedActivities: number;
+      remainingActivities: number;
+      progressPercentage: number;
+    };
+    sections: Array<{
+      sectionNumber: number;
+      sectionName: string;
+      totalActivities: number;
+      completedActivities: number;
+    }>;
+    quizzes: {
+      totalQuizzesGiven: number;
+      totalQuizAttempts: number;
+      avgQuizPercentage: number;
+      remainingQuizzes: number;
+    };
+  };
+}
 
 export const usersApi = createApi({
   reducerPath: 'usersApi',
@@ -31,6 +57,10 @@ export const usersApi = createApi({
       }),
       invalidatesTags: ['Profile', 'Teachers', 'Students'],
     }),
+    getAnalytics: build.query<AnalyticsResponse, void>({
+      query: () => ({ url: API_ENDPOINTS.USERS.ANALYTICS }),
+      providesTags: ['Profile'],
+    }),
   }),
 });
 
@@ -42,4 +72,6 @@ export const {
   useGetAdminsQuery,
   useLazyGetAdminsQuery,
   useUpdateProfileMutation,
+  useGetAnalyticsQuery,
+  useLazyGetAnalyticsQuery,
 } = usersApi;

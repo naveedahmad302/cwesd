@@ -16,7 +16,7 @@ import {
   useGetAdminsQuery,
 } from '../../store/api';
 import { performCompleteLogout } from '../../utils/logout';
-import type { ApiUser } from '../../types/users.types';
+import type { ApiUser } from '../../types/user';
 
 const DEFAULT_AVATAR =
   'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRsoWq-wtc1cASC4c3MngI7FHK3BJPb3bw1rg&s';
