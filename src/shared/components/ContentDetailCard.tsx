@@ -524,7 +524,7 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
       final: finalAssignmentId,
     });
 
-    // First, check if there's an existing submission
+    // Check if we have the required parameters
     if (!moodleId || !sectionNumber || !instance) {
       console.log('Missing required parameters for submission');
       Alert.alert(
@@ -534,119 +534,28 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
       return;
     }
 
+    if (!finalAssignmentId) {
+      Alert.alert('Error', 'Assignment ID not found. Cannot submit.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Check existing submission first
-      console.log('=== CHECKING EXISTING SUBMISSION ===');
-      const existingSubmission = await getMySubmission({
-        moodleId,
-        sectionNumber,
-        instance,
-      }).unwrap();
-
-      console.log('Existing submission found:', existingSubmission);
-
-      let formData = new FormData();
-
-      if (existingSubmission?.success && existingSubmission.hasSubmission && existingSubmission.submittedFiles?.length > 0) {
-        console.log('=== USING EXISTING FILE ===');
-        // Use existing file from submission
-        const existingFile = existingSubmission.submittedFiles[0];
-        console.log('Re-submitting existing file:', existingFile);
-        
-        // Map the API response fields to the expected format
-        const fileName = existingFile.filename || existingFile.name || 'document.pdf';
-        const fileUrl = existingFile.fileurl || existingFile.url;
-        const fileType = existingFile.mimetype || existingFile.type || 'application/pdf';
-        
-        console.log('Mapped file data:', {
-          name: fileName,
-          url: fileUrl,
-          type: fileType,
-        });
-        
-        // Add existing file info (backend should handle file retrieval)
-        formData.append('file', {
-          uri: fileUrl,
-          type: fileType,
-          name: decodeURIComponent(fileName),
-        } as any);
-        
-        Alert.alert(
-          'Existing File Found',
-          `Using existing file: ${decodeURIComponent(fileName)}`,
-        );
-      } else {
-        console.log('=== USING NEW FILE ===');
-        // Use new file provided by user
-        if (files.length === 0) {
-          throw new Error('No file provided for submission');
-        }
-
-        const file = files[0];
-        console.log('=== PRE-UPLOAD FILE VALIDATION ===');
-        console.log('File URI before upload:', file.uri);
-        console.log('File name:', file.name);
-        console.log('File type:', file.type);
-        console.log('File data type:', typeof fileData);
-
-        formData.append('file', {
-          uri: file.uri,
-          type: file.type,
-          name: file.name,
-        } as any);
-      }
-
-      // Add required form fields
-      formData.append(
-        'displayName',
-        `Assignment Submission - ${new Date().toLocaleDateString()}`,
-      );
-      
-      // Add assignment ID if available (module id from contents API)
-      if (finalAssignmentId) {
-        formData.append('id', finalAssignmentId);
-        console.log('Added assignment ID to FormData:', finalAssignmentId);
-      }
-      
-      // Also add instance for compatibility
-      if (instance) {
-        formData.append('instance', instance);
-      }
-
-      console.log('=== DIRECT SUBMISSION ===');
-      console.log('URL:', `/moodle/courses/${moodleId}/sections/${sectionNumber}/assignments/${instance}/submit`);
-      console.log('Method: POST');
-      console.log('FormData contents:');
-      try {
-        (formData as any)._parts?.forEach(([key, value]: [string, any]) => {
-          console.log(`  ${key}:`, value);
-        });
-      } catch (e) {
-        console.log('  FormData: (Unable to enumerate entries)');
-      }
-      
-      // Additional logging to verify FormData
-      console.log('=== FORMDATA VERIFICATION ===');
-      console.log('FormData type:', typeof formData);
-      console.log('FormData entries count:', (formData as any)._parts?.length || 0);
-      console.log('Final assignment ID being sent:', finalAssignmentId);
-      console.log('=== END FORMDATA VERIFICATION ===');
-      
-      console.log('=== END DIRECT SUBMISSION ===');
-      
+      // According to the API specification, we only need to send the assignment ID
       const payload = { 
         moodleId, 
         sectionNumber, 
-        instance, 
-        data: formData,
-        // Add assignment ID as fallback in case FormData parsing fails
-        params: finalAssignmentId ? { id: finalAssignmentId } : undefined
+        instance,
+        data: { id: finalAssignmentId }
       };
+      
+      console.log('=== SUBMISSION PAYLOAD ===');
+      console.log('Sending payload:', payload);
+      console.log('Assignment ID:', finalAssignmentId);
+      console.log('=== END PAYLOAD ===');
+      
       const result = await submitAssignmentMutation(payload).unwrap();
       console.log('Assignment submitted successfully:', result);
-
-      console.log('Submission response:', result);
 
       if (result?.success) {
         const data = result.data as
@@ -706,76 +615,49 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
       if (err?.code === 'FETCH_ERROR' || err?.message?.includes('Network')) {
         Alert.alert(
           'Demo Mode',
-          'Server is not available. File selected successfully for demo purposes.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Simulate successful submission in demo mode
-                if (useDynamicData) {
-                  setDynamicSubmissionData(prev => ({
-                    ...prev,
-                    submissionStatus: 'submitted',
-                    submissionDate: new Date().toLocaleDateString(),
-                    lastModifiedDate: new Date().toLocaleDateString(),
-                  }));
-                }
-              },
-            },
-          ],
-        );
-      } else if (err?.status === 500) {
-        Alert.alert(
-          'Demo Mode',
-          'Server error occurred. File selected successfully for demo purposes.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Simulate successful submission in demo mode
-                if (useDynamicData) {
-                  setDynamicSubmissionData(prev => ({
-                    ...prev,
-                    submissionStatus: 'submitted',
-                    submissionDate: new Date().toLocaleDateString(),
-                    lastModifiedDate: new Date().toLocaleDateString(),
-                  }));
-                }
-              },
-            },
-          ],
-        );
-      } else if (err?.status === 400) {
-        Alert.alert(
-          'Error',
-          (err?.data as { message?: string })?.message ||
-            'Invalid file format or size. Please check your submission.',
-        );
-      } else if (err?.status === 401) {
-        Alert.alert(
-          'Error',
-          'You are not authorized to submit this assignment.',
-        );
-      } else if (err?.status === 403) {
-        Alert.alert(
-          'Error',
-          'Assignment submission is not allowed at this time.',
-        );
-      } else if (err?.status === 404) {
-        Alert.alert(
-          'Error',
-          'Assignment not found. Please refresh and try again.',
+          'Server is not available. Assignment selected successfully for demo purposes.',
         );
       } else {
         Alert.alert(
           'Error',
-          (err?.data as { message?: string })?.message ||
-            'Failed to submit assignment. Please try again.',
+          err?.data?.message || err?.message || 'Failed to submit assignment',
         );
       }
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const renderSubmissionStatus = () => {
+    const currentData = useDynamicData ? dynamicSubmissionData : {
+      submissionStatus,
+      submittedFiles,
+      submissionDate,
+      lastModifiedDate,
+    };
+
+    if (currentData.submissionStatus === 'submitted') {
+      return (
+        <View style={styles.submissionStatus}>
+          <CircleCheckBig size={16} color="#10b981" />
+          <StyledText style={styles.submissionText}>
+            Submitted on {currentData.submissionDate}
+          </StyledText>
+        </View>
+      );
+    }
+
+    if (currentData.submissionStatus === 'draft') {
+      return (
+        <View style={styles.submissionStatus}>
+          <StyledText style={styles.draftText}>
+            Draft last modified: {currentData.lastModifiedDate}
+          </StyledText>
+        </View>
+      );
+    }
+
+    return null;
   };
 
   const formatFileSize = (bytes: number): string => {
