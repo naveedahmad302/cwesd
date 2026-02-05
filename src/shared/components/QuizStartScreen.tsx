@@ -5,6 +5,7 @@ import StyledText from './StyledText';
 import { HelpCircle, Clock, Target, Award, CirclePlay, ChevronRight, Menu } from 'lucide-react-native';
 import CourseSidebar from './CourseSidebar';
 import QuizScreen from './QuizScreen';
+import QuizResultsScreen from './QuizResultsScreen';
 import { useGetQuizByIdQuery, useStartAttemptMutation, useSubmitQuizMutation } from '../../store/api';
 import { useAppSelector } from '../../store';
 import { showErrorToast } from '../../utils/toast';
@@ -59,7 +60,7 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
   duration = 60,
   points = 100,
   questions = 10,
-  maxAttempts = 3,
+  maxAttempts = 2,
   availableFrom,
   availableUntil,
   quizId,
@@ -80,7 +81,10 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
   const [showSidebar, setShowSidebar] = useState(false);
   const [quizStarted, setQuizStarted] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [currentAttempt, setCurrentAttempt] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [maxAttemptsReached, setMaxAttemptsReached] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refetch();
@@ -92,6 +96,15 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     navigation.setOptions({ headerShown: !quizStarted });
     return () => navigation.setOptions({ headerShown: true });
   }, [navigation, quizStarted]);
+
+  React.useEffect(() => {
+    console.log('=== QUIZ DATA DEBUG ===');
+    console.log('quizResponse:', quizResponse);
+    console.log('isLoadingQuiz:', isLoadingQuiz);
+    console.log('quizData:', quizData);
+    console.log('mappedQuestions.length:', mappedQuestions?.length || 0);
+    console.log('=====================');
+  }, [quizResponse, quizData, isLoadingQuiz, mappedQuestions]);
 
   React.useEffect(() => {
     if (quizResponse === undefined && !isLoadingQuiz && quizId) setQuizError('Unable to load quiz details.');
@@ -119,58 +132,159 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
   const availableUntilValue = quizData?.availableUntil ?? availableUntil;
   const defaultPointsPerQuestion = quizData?.defaultPointsPerQuestion ?? undefined;
   const attemptsUsed = useMemo(() => {
-    if (!user?.id) {
+    // If max attempts were reached via API, use maxAttemptsValue
+    if (maxAttemptsReached) {
+      return maxAttemptsValue;
+    }
+    
+    // If we have a current attempt with attemptNumber, use that
+    if (currentAttempt?.attemptNumber) {
+      return currentAttempt.attemptNumber;
+    }
+    
+    // Count user's submissions from submittedBy array
+    if (!user?.id || !quizData?.submittedBy) {
       return 0;
     }
-    const submittedBy = (quizData?.submittedBy ?? []) as Array<{ id?: string; _id?: string }>;
-    return submittedBy.filter((attempt: { id?: string; _id?: string }) => {
-      const attemptId = attempt?.id ?? attempt?._id;
-      return attemptId === user.id;
-    }).length;
-  }, [quizData?.submittedBy, user?.id]);
+    
+    const userSubmissions = quizData.submittedBy.filter((submission: any) => {
+      const submissionId = submission.id || submission._id;
+      return submissionId === user.id;
+    });
+    
+    console.log('User submissions found:', userSubmissions.length);
+    console.log('User ID:', user.id);
+    console.log('SubmittedBy array:', quizData.submittedBy);
+    
+    return userSubmissions.length;
+  }, [maxAttemptsReached, maxAttemptsValue, currentAttempt?.attemptNumber, quizData?.submittedBy, user?.id]);
   const hasReachedMaxAttempts = maxAttemptsValue > 0 && attemptsUsed >= maxAttemptsValue;
 
   React.useEffect(() => {
-    if (hasReachedMaxAttempts && !quizStarted) {
-      showErrorToast(`Maximum attempt (${maxAttemptsValue}) reached.`, 'Attempt limit reached');
+    if (hasReachedMaxAttempts && !quizStarted && !showResults) {
+      showErrorToast(
+        `You have used all ${maxAttemptsValue} attempts for this quiz. View your results below.`, 
+        'Maximum Attempts Reached'
+      );
+      setShowResults(true);
     }
-  }, [hasReachedMaxAttempts, maxAttemptsValue, quizStarted]);
+  }, [hasReachedMaxAttempts, maxAttemptsValue, quizStarted, showResults]);
+
+  // Check attempt availability by calling the attempt API immediately
+  React.useEffect(() => {
+    if (!quizId || !user?.id || quizStarted || showResults) {
+      console.log('Skipping attempt check - missing data or already started');
+      return;
+    }
+
+    console.log('=== CHECKING ATTEMPT AVAILABILITY ===');
+    console.log('quizId:', quizId);
+    console.log('user.id:', user.id);
+
+    const checkAttempt = async () => {
+      try {
+        console.log('Making attempt API call...');
+        const result = await startAttempt({ quizId, studentId: user.id }).unwrap() as any;
+        console.log('API SUCCESS:', result);
+        
+        if (result?.success && result?.data) {
+          setCurrentAttempt(result.data);
+          console.log('Attempt available:', result.data.attemptNumber);
+        }
+      } catch (error: any) {
+        console.log('API ERROR:', error);
+        console.log('Error status:', error?.status);
+        console.log('Error data:', error?.data);
+        
+        // Handle the max attempts error
+        const errorMessage = error?.data?.message || error?.message || '';
+        if (errorMessage.includes('Maximum attempts')) {
+          console.log('MAXIMUM ATTEMPTS REACHED - Setting state and showing results');
+          setMaxAttemptsReached(true);
+          showErrorToast(
+            `Maximum attempts reached. View your results below.`, 
+            'Maximum Attempts Reached'
+          );
+          setShowResults(true);
+        } else {
+          console.log('Different error - not max attempts');
+        }
+      }
+    };
+
+    checkAttempt();
+  }, [quizId, user?.id, quizStarted, showResults]);
 
   const handleStartQuiz = async () => {
+    console.log('=== START QUIZ DEBUG ===');
+    console.log('quizId:', quizId);
+    console.log('user.id:', user?.id);
+    console.log('hasReachedMaxAttempts:', hasReachedMaxAttempts);
+    console.log('maxAttemptsValue:', maxAttemptsValue);
+    console.log('attemptsUsed:', attemptsUsed);
+    console.log('currentAttempt:', currentAttempt);
+    console.log('isStarting:', isStarting);
+    console.log('isLoadingQuiz:', isLoadingQuiz);
+    console.log('mappedQuestions.length:', mappedQuestions?.length || 0);
+    console.log('quizData:', quizData);
+    console.log('========================');
+
     if (!quizId || !user?.id) {
       Alert.alert('Unable to start quiz', 'Missing quiz or student information.');
       return;
     }
 
     if (hasReachedMaxAttempts) {
-      showErrorToast(`You can only attempt this quiz ${maxAttemptsValue} times.`, 'Attempt limit reached');
+      showErrorToast(
+        `You have already used all ${maxAttemptsValue} attempts. View your results below.`, 
+        'Maximum Attempts Reached'
+      );
+      setShowResults(true);
       return;
     }
 
+    // If we already have a valid attempt from the availability check, use it
+    if (currentAttempt && currentAttempt.attemptNumber) {
+      console.log('Using pre-checked attempt:', currentAttempt);
+      setQuizStarted(true);
+      onStartQuiz();
+      return;
+    }
+
+    // Otherwise, try to start a new attempt (fallback)
     setIsStarting(true);
 
     try {
-      await startAttempt({ quizId, studentId: user.id }).unwrap();
+      const result = await startAttempt({ quizId, studentId: user.id }).unwrap() as any;
+      console.log('Quiz attempt started:', result);
+      
+      // Store the attempt data
+      if (result?.success && result?.data) {
+        setCurrentAttempt(result.data);
+        console.log(`Attempt ${result.data.attemptNumber} started for quiz ${result.data.quizId}`);
+        console.log('API Response attempt data:', result.data);
+      }
+      
       setQuizStarted(true);
       onStartQuiz();
     } catch (error) {
-      Alert.alert('Unable to start quiz', 'Please try again.');
+      console.error('Failed to start quiz attempt:', error);
+      
+      // Check if it's a max attempts error
+      if ((error as any)?.data?.message?.includes('Maximum attempts')) {
+        showErrorToast(
+          `Maximum attempts (${maxAttemptsValue}) reached. View your results below.`, 
+          'Maximum Attempts Reached'
+        );
+        setShowResults(true);
+      } else {
+        Alert.alert('Unable to start quiz', 'Please try again.');
+      }
       setIsStarting(false);
     }
   };
 
-  const handleQuizSubmit = async (answers: number[]) => {
-    // Calculate score
-    let correctAnswers = 0;
-    answers.forEach((answer, index) => {
-      if (answer === mappedQuestions[index]?.correctAnswer) {
-        correctAnswers++;
-      }
-    });
-    
-    const score = mappedQuestions.length ? (correctAnswers / mappedQuestions.length) * 100 : 0;
-    console.log('Quiz score:', score);
-
+  const handleQuizSubmit = async (answers: Array<{questionId: string; selectedOptions: number[]}>) => {
     if (!quizId || !user?.id) {
       Alert.alert('Unable to submit quiz', 'Missing quiz or student information.');
       setQuizStarted(false);
@@ -179,12 +293,37 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     }
 
     try {
-      await submitQuiz({ quizId, studentId: user.id, answers }).unwrap();
-    } catch (error) {
-      Alert.alert('Unable to submit quiz', 'Please try again.');
-    } finally {
-      // Reset quiz state after completion
-      setQuizStarted(false);
+      console.log('Submitting quiz answers:', answers);
+      console.log('Current attempt:', currentAttempt);
+      
+      const result = await submitQuiz({ quizId, studentId: user.id, answers }).unwrap() as any;
+      console.log('Quiz submitted successfully:', result);
+      
+      // Update current attempt with submission data if available
+      if (result?.success && result?.data) {
+        setCurrentAttempt(result.data);
+      }
+      
+      // Refetch quiz data to update attempts count
+      await refetch();
+      
+      // Show success message and then show results
+      Alert.alert(
+        'Quiz Submitted',
+        'Your quiz has been submitted successfully!',
+        [{ 
+          text: 'OK', 
+          onPress: () => {
+            setQuizStarted(false);
+            setShowResults(true);
+            setIsStarting(false);
+          }
+        }]
+      );
+    } catch (error: any) {
+      console.error('Failed to submit quiz:', error);
+      const errorMessage = error?.data?.message || error?.message || 'Failed to submit quiz. Please try again.';
+      Alert.alert('Submission Failed', errorMessage);
       setIsStarting(false);
     }
   };
@@ -193,6 +332,7 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     // Reset quiz state
     setQuizStarted(false);
     setIsStarting(false);
+    setCurrentAttempt(null);
   };
 
   const handleHeaderClick = () => {
@@ -224,18 +364,66 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
     }
   };
 
+  const handleRetakeQuiz = () => {
+    setShowResults(false);
+    handleStartQuiz();
+  };
+
   return (
     <View style={styles.safeArea}>
       {/* Show QuizScreen when quiz is started */}
       {quizStarted ? (
         <QuizScreen
-          title={quizData?.title ?? title}
-          questions={mappedQuestions}
-          duration={durationValue}
-          totalPoints={totalPointsValue}
-          defaultPointsPerQuestion={defaultPointsPerQuestion}
+          quizId={quizId!}
           onSubmit={handleQuizSubmit}
           onClose={handleQuizClose}
+          courseId={courseId}
+          moodleId={moodleId}
+          studentId={user?.id}
+        />
+      ) : showResults ? (
+        <QuizResultsScreen
+          title={quizData?.title ?? title}
+          description={quizData?.description ?? description}
+          totalPoints={totalPointsValue}
+          marksObtained={(() => {
+            // Find the user's submissions in the submittedBy array
+            const userSubmissions = quizData?.submittedBy?.filter((submission: any) => {
+              const submissionId = submission.id || submission._id;
+              return submissionId === user?.id;
+            }) || [];
+            
+            if (userSubmissions.length === 0) {
+              return 0;
+            }
+            
+            // Get the latest submission (highest marks or last one)
+            const latestSubmission = userSubmissions.reduce((latest: any, current: any) => {
+              // Prefer higher marks, if equal prefer the later one (by array order)
+              if (current.marksObtained > latest.marksObtained) {
+                return current;
+              }
+              return latest;
+            }, userSubmissions[0]);
+            
+            console.log('User submissions:', userSubmissions);
+            console.log('Latest submission:', latestSubmission);
+            
+            return latestSubmission?.marksObtained || 0;
+          })()}
+          duration={durationValue}
+          maxAttempts={maxAttemptsValue}
+          attemptsUsed={attemptsUsed}
+          currentAttempt={currentAttempt}
+          questions={questionCountValue}
+          availableFrom={availableFromValue}
+          availableTo={availableUntilValue}
+          onRetakeQuiz={attemptsUsed < maxAttemptsValue ? handleRetakeQuiz : undefined}
+          onNavigateToQuiz={handleQuizClick}
+          onNavigateToAssignment={handleAssignmentClick}
+          onNavigateToLecture={handleLectureClick}
+          courseId={courseId}
+          moodleId={moodleId}
         />
       ) : (
         <>
@@ -307,8 +495,10 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
                     <HelpCircle size={20} color="#E56B8C" />
                   </View> */}
                   <View style={styles.infoContent}>
-                    <StyledText style={styles.infoTitle}>Max Attempts</StyledText>
-                    <StyledText style={styles.infoValue}>{maxAttemptsValue} attempts</StyledText>
+                    <StyledText style={styles.infoTitle}>Attempts</StyledText>
+                    <StyledText style={styles.infoValue}>
+                      {attemptsUsed} of {maxAttemptsValue} used
+                    </StyledText>
                   </View>
                 </View>
               </View>
@@ -337,22 +527,39 @@ const QuizStartScreen: React.FC<QuizStartScreenProps> = ({
               )}
             </View>
 
+            {/* Attempts Warning */}
+            {hasReachedMaxAttempts ? (
+              <View style={styles.maxAttemptsWarning}>
+                <StyledText style={styles.maxAttemptsWarningText}>
+                  You have reached the maximum of {maxAttemptsValue} attempts. View your results below.
+                </StyledText>
+              </View>
+            ) : attemptsUsed === 1 && (
+              <View style={styles.attemptsWarning}>
+                <StyledText style={styles.attemptsWarningText}>
+                  You have 1 attempt remaining. Make it count!
+                </StyledText>
+              </View>
+            )}
+
             {/* Start Button */}
             <View style={styles.startContainer}>
               <TouchableOpacity
                 style={[styles.startButton, isStarting && styles.startButtonDisabled]}
                 onPress={handleStartQuiz}
-                disabled={isStarting || isLoadingQuiz || !mappedQuestions.length || hasReachedMaxAttempts}
+                disabled={isStarting || isLoadingQuiz || hasReachedMaxAttempts}
               >
                 <CirclePlay size={20} color="#FFFFFF" />
                 <StyledText style={styles.startButtonText}>
                   {hasReachedMaxAttempts
-                    ? 'Attempt limit reached'
+                    ? `All ${maxAttemptsValue} attempts used`
                     : isLoadingQuiz
                       ? 'Loading...'
                       : isStarting
                         ? 'Starting...'
-                        : 'Start Quiz'}
+                        : attemptsUsed === 0
+                          ? 'Start Quiz (Attempt 1)'
+                          : `Retake Quiz (Attempt ${attemptsUsed + 1})`}
                 </StyledText>
               </TouchableOpacity>
             </View>
@@ -545,6 +752,34 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  attemptsWarning: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  attemptsWarningText: {
+    fontSize: 14,
+    color: '#92400E',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  maxAttemptsWarning: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#EF4444',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  maxAttemptsWarningText: {
+    fontSize: 14,
+    color: '#B91C1C',
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
 

@@ -6,9 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { ChevronLeft, ChevronRight, Clock, Circle, CircleDot } from 'lucide-react-native';
 import { typography } from '../../theme/typography';
+import { useLazyGetQuizByIdQuery } from '../../store/api';
 
 interface Question {
   id: number;
@@ -19,33 +21,67 @@ interface Question {
 }
 
 interface QuizScreenProps {
-  title: string;
-  questions: Question[];
-  duration: number;
-  onSubmit: (answers: number[]) => void;
+  quizId: string;
+  onSubmit: (answers: Array<{questionId: string; selectedOptions: number[]}>) => void;
   onClose: () => void;
-  timeRemaining?: number;
-  totalPoints?: number;
-  defaultPointsPerQuestion?: number;
+  courseId?: string;
+  moodleId?: string;
+  studentId?: string;
 }
 
 const QuizScreen: React.FC<QuizScreenProps> = ({
-  title,
-  questions,
-  duration,
+  quizId,
   onSubmit,
   onClose,
-  timeRemaining = duration * 60, // Convert minutes to seconds
-  totalPoints,
-  defaultPointsPerQuestion
+  courseId,
+  moodleId,
+  studentId
 }) => {
+  const [getQuizById, { data: quizData, isLoading, error }] = useLazyGetQuizByIdQuery();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<number[]>(new Array(questions.length).fill(-1));
-  const [timeLeft, setTimeLeft] = useState(timeRemaining);
+  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+  const [timeLeft, setTimeLeft] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [quizInitialized, setQuizInitialized] = useState(false);
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const currentQuestionPoints = currentQuestion?.points ?? defaultPointsPerQuestion ?? 0;
+  // Fetch quiz data when component mounts
+  React.useEffect(() => {
+    if (quizId && !quizInitialized) {
+      getQuizById(quizId);
+      setQuizInitialized(true);
+    }
+  }, [quizId, getQuizById, quizInitialized]);
+
+  // Initialize quiz state when data is loaded
+  React.useEffect(() => {
+    const actualQuizData = quizData?.data || quizData; // Handle both wrapped and direct data
+    if (actualQuizData?.questions && selectedAnswers.length === 0) {
+      // Convert API questions to component format
+      const convertedQuestions: Question[] = actualQuizData.questions.map((q, index) => ({
+        id: index,
+        question: q.questionText,
+        options: q.options.map(opt => opt.text),
+        correctAnswer: q.options.findIndex(opt => opt.isCorrect),
+        points: q.points || actualQuizData.defaultPointsPerQuestion || 0
+      }));
+
+      setSelectedAnswers(new Array(convertedQuestions.length).fill(-1));
+      setTimeLeft((actualQuizData.durationMinutes || 60) * 60); // Convert minutes to seconds
+    }
+  }, [quizData, selectedAnswers.length]);
+
+  const actualQuizData = quizData?.data || quizData; // Handle both wrapped and direct data
+  const currentQuestions = actualQuizData?.questions ? 
+    actualQuizData.questions.map((q, index) => ({
+      id: index,
+      question: q.questionText,
+      options: q.options.map(opt => opt.text),
+      correctAnswer: q.options.findIndex(opt => opt.isCorrect),
+      points: q.points || actualQuizData.defaultPointsPerQuestion || 0
+    })) : [];
+
+  const currentQuestion = currentQuestions[currentQuestionIndex] || null;
+  const currentQuestionPoints = currentQuestion?.points || actualQuizData?.defaultPointsPerQuestion || 0;
 
   // Timer effect
   React.useEffect(() => {
@@ -78,9 +114,20 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
   };
 
   const handleNext = () => {
-    if (currentQuestionIndex < questions.length - 1) {
+    if (currentQuestionIndex < currentQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
     }
+  };
+
+  const formatAnswersForSubmission = () => {
+    const actualQuizData = quizData?.data || quizData;
+    return selectedAnswers.map((answerIndex, questionIndex) => {
+      const question = actualQuizData?.questions[questionIndex];
+      return {
+        questionId: question?._id || '',
+        selectedOptions: answerIndex !== -1 ? [answerIndex] : []
+      };
+    }).filter(answer => answer.questionId); // Filter out any invalid entries
   };
 
   const handleSubmitQuiz = () => {
@@ -97,7 +144,8 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
           style: 'default',
           onPress: () => {
             setIsSubmitting(true);
-            onSubmit(selectedAnswers);
+            const formattedAnswers = formatAnswersForSubmission();
+            onSubmit(formattedAnswers);
           },
         },
       ]
@@ -106,19 +154,53 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
 
   const getProgressPercentage = () => {
     const answered = selectedAnswers.filter(answer => answer !== -1).length;
-    return (answered / questions.length) * 100;
+    return (answered / currentQuestions.length) * 100;
   };
 
-  const isLastQuestion = currentQuestionIndex === questions.length - 1;
+  const isLastQuestion = currentQuestionIndex === currentQuestions.length - 1;
   const allQuestionsAnswered = selectedAnswers.every(answer => answer !== -1);
+
+  // Show loading state if no questions are available yet
+  if (currentQuestions.length === 0 && !actualQuizData) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#E56B8C" />
+        <Text style={styles.loadingText}>Preparing quiz...</Text>
+      </View>
+    );
+  }
+
+  // Show error state if API failed and no cached data
+  if (error && !actualQuizData && currentQuestions.length === 0) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Failed to load quiz</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => getQuizById(quizId)}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Show no data state (but allow for cached questions)
+  if (!actualQuizData && !isLoading && currentQuestions.length === 0) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Quiz not found</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={onClose}>
+          <Text style={styles.retryButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTextBlock}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>None</Text>
+          <Text style={styles.title}>{actualQuizData?.title || 'Quiz'}</Text>
+          <Text style={styles.subtitle}>{actualQuizData?.description || 'No description'}</Text>
         </View>
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
           <ChevronLeft size={18} color="#111827" />
@@ -131,7 +213,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
           <View style={styles.progressHeader}>
             <Text style={styles.progressLabel}>Progress</Text>
             <Text style={styles.progressCount}>
-              {selectedAnswers.filter(answer => answer !== -1).length} / {questions.length} answered
+              {selectedAnswers.filter(answer => answer !== -1).length} / {currentQuestions.length} answered
             </Text>
           </View>
           <View style={styles.progressBar}>
@@ -149,7 +231,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
             <Text style={styles.infoPillText}>{formatTime(timeLeft)}</Text>
           </View>
           <View style={styles.infoPill}>
-            <Text style={styles.infoPillText}>Points: {totalPoints ?? 0}</Text>
+            <Text style={styles.infoPillText}>Points: {actualQuizData?.totalPoints || 0}</Text>
           </View>
         </View>
       </View>
@@ -167,18 +249,18 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
               <Text style={styles.questionBadgeText}>{currentQuestionIndex + 1}</Text>
             </View>
             <View style={styles.questionHeaderText}>
-              <Text style={styles.questionTitle}>{currentQuestion.question}</Text>
+              <Text style={styles.questionTitle}>{currentQuestion?.question || 'Loading question...'}</Text>
               <View style={styles.questionMetaRow}>
                 <Text style={styles.questionPoints}>{currentQuestionPoints} points</Text>
                 <View style={styles.questionTag}>
-                  <Text style={styles.questionTagText}>Single Choice</Text>
+                  <Text style={styles.questionTagText}>{actualQuizData?.questions[currentQuestionIndex]?.type === 'single_option' ? 'Single Choice' : 'Multiple Choice'}</Text>
                 </View>
               </View>
             </View>
           </View>
 
           <View style={styles.optionsContainer}>
-            {currentQuestion.options.map((option, index) => (
+            {currentQuestion?.options?.map((option: string, index: number) => (
               <TouchableOpacity
                 key={index}
                 style={[
@@ -507,6 +589,43 @@ const styles = StyleSheet.create({
   },
   disabledButtonText: {
     color: '#9CA3AF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+    fontFamily: typography.primary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#EF4444',
+    fontFamily: typography.primary,
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#E56B8C',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: typography.primary,
   },
 });
 

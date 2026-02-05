@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import StyledText from './StyledText';
 import {
@@ -88,6 +89,7 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
   const [draftAssignment] = useDraftAssignmentMutation();
   const [submitAssignmentMutation] = useSubmitAssignmentMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState<string | null>(null); // Track which file is being downloaded
   const isLoadingSubmission =
     isLoading || (isUninitialized === false && isLoading);
 
@@ -856,7 +858,7 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
             {!isLoadingSubmission && (
               <>
                 {currentSubmissionStatus === 'submitted' ? (
-                  // Submitted Design - Based on your screenshot
+                  // Submitted Design 
                   <View>
                     <View style={styles.submissionRow}>
                       <StyledText style={styles.submissionLabel}>
@@ -898,12 +900,47 @@ const ContentDetailCard: React.FC<ContentDetailCardProps> = ({
                               {file.url && (
                                 <TouchableOpacity
                                   style={styles.externalLinkIcon}
-                                  onPress={() => {
+                                  onPress={async () => {
                                     // Handle file download/view
                                     console.log('Opening file:', file.url);
+                                    
+                                    // Create download link from your API response
+                                    const downloadUrl = file.url;
+                                    
+                                    // Set loading state for this specific file
+                                    setIsDownloading(file.id);
+                                    
+                                    try {
+                                      // Use React Native Linking to open/download the file
+                                      const supported = await Linking.canOpenURL(downloadUrl);
+                                      
+                                      if (supported) {
+                                        console.log('Opening URL:', downloadUrl);
+                                        // Show success message
+                                        Alert.alert('Download Started', `Downloading ${file.name}...`);
+                                        await Linking.openURL(downloadUrl);
+                                      } else {
+                                        console.log('Cannot open URL:', downloadUrl);
+                                        // Fallback: try to open in browser anyway
+                                        Alert.alert('Download Started', `Opening ${file.name}...`);
+                                        await Linking.openURL(downloadUrl);
+                                      }
+                                    } catch (err) {
+                                      console.error('Error opening URL:', err);
+                                      // Show error to user
+                                      Alert.alert('Download Error', 'Unable to download the file. Please try again.');
+                                    } finally {
+                                      // Clear loading state
+                                      setIsDownloading(null);
+                                    }
                                   }}
+                                  disabled={isDownloading === file.id}
                                 >
-                                  <ExternalLink size={16} color="#6B7280" />
+                                  {isDownloading === file.id ? (
+                                    <ActivityIndicator size="small" color="#6B7280" />
+                                  ) : (
+                                    <ExternalLink size={16} color="#6B7280" />
+                                  )}
                                 </TouchableOpacity>
                               )}
                             </View>

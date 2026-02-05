@@ -24,6 +24,7 @@ export const API_ENDPOINTS = {
     BY_ID: (quizId: string) => `/quizzes/${quizId}`,
     ATTEMPT: (quizId: string) => `/quizzes/${quizId}/attempt`,
     SUBMIT: (quizId: string) => `/quizzes/${quizId}/submit`,
+    
   },
 
   MOODLE: {

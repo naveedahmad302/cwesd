@@ -34,22 +34,40 @@ export function transformSubmissionData(
     };
   }
 
-  const { lastAttempt } = apiResponse;
+  const { lastAttempt, submittedFiles: topLevelFiles } = apiResponse;
   const submittedFiles: TransformedSubmissionData['submittedFiles'] = [];
 
+  // Process top-level submittedFiles array (from your API response)
+  if (topLevelFiles && Array.isArray(topLevelFiles) && topLevelFiles.length > 0) {
+    topLevelFiles.forEach((file: { filename: string; filesize: number; mimetype?: string; fileurl: string }) => {
+      submittedFiles.push({
+        id: file.filename || `file-${Date.now()}`,
+        name: decodeURIComponent(file.filename), // Decode URL-encoded filenames
+        size: formatFileSize(file.filesize),
+        type: file.mimetype || 'application/octet-stream',
+        url: file.fileurl,
+      });
+    });
+  }
+
+  // Also process nested plugin files (fallback)
   if (lastAttempt?.submission?.plugins) {
     lastAttempt.submission.plugins.forEach((plugin: { type?: string; fileareas?: Array<{ files?: Array<{ filename: string; filesize: number; mimetype?: string; fileurl: string }> }> }) => {
       if (plugin.type === 'file' && plugin.fileareas) {
         plugin.fileareas.forEach((filearea) => {
           if (filearea.files?.length) {
             filearea.files.forEach((file) => {
-              submittedFiles.push({
-                id: file.filename || `file-${Date.now()}`,
-                name: file.filename,
-                size: formatFileSize(file.filesize),
-                type: file.mimetype || 'application/octet-stream',
-                url: file.fileurl,
-              });
+              // Avoid duplicates by checking if file already exists
+              const existingFile = submittedFiles.find(f => f.url === file.fileurl);
+              if (!existingFile) {
+                submittedFiles.push({
+                  id: file.filename || `file-${Date.now()}`,
+                  name: decodeURIComponent(file.filename), // Decode URL-encoded filenames
+                  size: formatFileSize(file.filesize),
+                  type: file.mimetype || 'application/octet-stream',
+                  url: file.fileurl,
+                });
+              }
             });
           }
         });
@@ -72,6 +90,12 @@ export function transformSubmissionData(
         year: 'numeric',
       })
     : '';
+
+  console.log('=== TRANSFORM SUBMISSION DATA ===');
+  console.log('Original API response:', apiResponse);
+  console.log('Transformed submittedFiles:', submittedFiles);
+  console.log('Submission status:', apiResponse.status);
+  console.log('================================');
 
   return {
     submissionStatus: (apiResponse.status as 'new' | 'submitted' | 'draft') || 'new',

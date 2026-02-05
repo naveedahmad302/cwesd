@@ -66,5 +66,5 @@ export interface StartAttemptPayload {
 
 export interface SubmitQuizPayload {
   studentId: string;
-  answers: number[];
+  answers: Array<{questionId: string; selectedOptions: number[]}>;
 }

@@ -40,7 +40,10 @@ const ContentCard: React.FC<ContentCardProps> = ({ item }) => {
     >
       <View style={styles.contentItemContent}>
         <View style={styles.checkboxContainer}>
-          <View style={[styles.checkbox, item.isCompleted && styles.checkboxChecked]}>
+          <View style={[
+            styles.checkbox, 
+            item.isCompleted && (item.type === 'assignment' ? styles.checkboxSubmitted : styles.checkboxChecked)
+          ]}>
             {item.isCompleted && <Check size={14} color="#FFFFFF" />}
           </View>
         </View>
@@ -89,6 +92,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxChecked: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  checkboxSubmitted: {
     backgroundColor: '#007AFF',
     borderColor: '#007AFF',
   },

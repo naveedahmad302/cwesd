@@ -65,11 +65,12 @@ const CourseDetailScreen: React.FC = () => {
   };
 
   const handleQuizClick = (quiz: any) => {
+    console.log('Quiz clicked in CourseDetailScreen:', quiz);
     setSelectedContent({
       type: 'quiz',
       title: quiz.title,
       description: 'Take this quiz to test your knowledge',
-      id: quiz.id?.toString(),
+      id: quiz._id?.toString() || quiz.id?.toString(), // Use _id from API response
       data: quiz,
     });
   };
@@ -223,48 +224,25 @@ const CourseDetailScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {selectedContent && selectedContent.type === 'quiz' ? (
-        // Check if quiz is submitted
-        isQuizSubmitted(selectedContent.data) ? (
-          // Show QuizResultsScreen for submitted quizzes
-          <QuizResultsScreen
-            title={selectedContent.title}
-            description={selectedContent.description}
-            totalPoints={selectedContent.data?.totalPoints}
-            marksObtained={
-              getCurrentUserSubmission(selectedContent.data)?.marksObtained || 0
-            }
-            duration={selectedContent.data?.durationMinutes}
-            maxAttempts={selectedContent.data?.maxAttempts}
-            attemptsUsed={selectedContent.data?.submittedBy?.length || 0}
-            onClose={handleBackToAnnouncements}
-            onRetakeQuiz={handleRetakeQuiz}
-            onNavigateToQuiz={handleQuizClick}
-            onNavigateToAssignment={handleAssignmentClick}
-            onNavigateToLecture={handleLectureClick}
-            courseId={course?.id}
-            moodleId={course?.moodleId?.toString()}
-          />
-        ) : (
-          // Show QuizStartScreen for unsubmitted quizzes
-          <QuizStartScreen
-            title={selectedContent.title}
-            description={selectedContent.description}
-            duration={selectedContent.data?.durationMinutes}
-            points={selectedContent.data?.totalPoints}
-            questions={10} // Default number of questions
-            maxAttempts={selectedContent.data?.maxAttempts}
-            availableFrom={selectedContent.data?.availableFrom}
-            availableUntil={selectedContent.data?.availableUntil}
-            quizId={selectedContent.data?._id ?? selectedContent.data?.id}
-            onStartQuiz={handleStartQuiz}
-            onClose={handleBackToAnnouncements}
-            onNavigateToQuiz={handleQuizClick}
-            onNavigateToAssignment={handleAssignmentClick}
-            onNavigateToLecture={handleLectureClick}
-            courseId={course?.id}
-            moodleId={course?.moodleId?.toString()}
-          />
-        )
+        // Always show QuizStartScreen - it will handle max attempts check internally
+        <QuizStartScreen
+          title={selectedContent.title}
+          description={selectedContent.description}
+          duration={selectedContent.data?.durationMinutes}
+          points={selectedContent.data?.totalPoints}
+          questions={10} // Default number of questions
+          maxAttempts={selectedContent.data?.maxAttempts}
+          availableFrom={selectedContent.data?.availableFrom}
+          availableUntil={selectedContent.data?.availableUntil}
+          quizId={selectedContent.data?._id ?? selectedContent.data?.id}
+          onStartQuiz={handleStartQuiz}
+          onClose={handleBackToAnnouncements}
+          onNavigateToQuiz={handleQuizClick}
+          onNavigateToAssignment={handleAssignmentClick}
+          onNavigateToLecture={handleLectureClick}
+          courseId={course?.id}
+          moodleId={course?.moodleId?.toString()}
+        />
       ) : (
         // Show normal CourseDetailScreen content
         <ScrollView

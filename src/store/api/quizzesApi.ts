@@ -37,7 +37,7 @@ export const quizzesApi = createApi({
     }),
     submitQuiz: build.mutation<
       unknown,
-      { quizId: string; studentId: string; answers: number[] }
+      { quizId: string; studentId: string; answers: Array<{questionId: string; selectedOptions: number[]}> }
     >({
       query: ({ quizId, studentId, answers }) => ({
         url: API_ENDPOINTS.QUIZZES.SUBMIT(quizId),

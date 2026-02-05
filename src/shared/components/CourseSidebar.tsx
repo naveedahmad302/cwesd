@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import StyledText from './StyledText';
 import { X, BookOpen, FileText, Video, Users, MessageSquare } from 'lucide-react-native';
-import { useGetQuizzesQuery, useLazyGetCourseSectionsQuery } from '../../store/api';
+import { useGetQuizzesQuery, useLazyGetCourseSectionsQuery, useLazyGetMySubmissionQuery } from '../../store/api';
 import ContentCard, { ContentItem } from './ContentCard';
 
 interface Quiz {
@@ -89,8 +89,10 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
 }) => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [lectures, setLectures] = useState<Assignment[]>([]);
+  const [assignmentSubmissionStatus, setAssignmentSubmissionStatus] = useState<{[key: string]: 'new' | 'draft' | 'submitted'}>({});
   const { data: quizzesResponse, isLoading: loadingQuizzes } = useGetQuizzesQuery(undefined, { skip: !courseId });
   const [getCourseSections, { isLoading: loadingAssignments }] = useLazyGetCourseSectionsQuery();
+  const [getMySubmission] = useLazyGetMySubmissionQuery();
 
   const quizzes = useMemo(() => {
     if (!courseId || !quizzesResponse) return [];
@@ -127,6 +129,47 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
     notSubmitted: quizzes.filter(quiz => !isQuizSubmitted(quiz)).length
   };
 
+  const fetchAssignmentSubmissionStatus = useCallback(async (assignments: Assignment[]) => {
+    if (!moodleId) return;
+    
+    const statusMap: {[key: string]: 'new' | 'draft' | 'submitted'} = {};
+    
+    for (const assignment of assignments) {
+      try {
+        // Find which section this assignment belongs to
+        const sectionsResult = await getCourseSections(moodleId).unwrap();
+        if (sectionsResult.success && sectionsResult.data?.sections) {
+          let sectionNumber = '0';
+          
+          for (const section of sectionsResult.data.sections) {
+            const foundInSection = section.modules.some((module: Assignment) => 
+              module.id === assignment.id || module.instance === assignment.instance
+            );
+            if (foundInSection) {
+              sectionNumber = section.sectionNumber.toString();
+              break;
+            }
+          }
+          
+          const submissionResult = await getMySubmission({
+            moodleId,
+            sectionNumber,
+            instance: assignment.instance.toString()
+          }).unwrap();
+          
+          if (submissionResult.success && submissionResult.status) {
+            statusMap[assignment.id.toString()] = submissionResult.status as 'new' | 'draft' | 'submitted';
+          }
+        }
+      } catch (error) {
+        console.log(`Failed to fetch submission status for assignment ${assignment.id}:`, error);
+        statusMap[assignment.id.toString()] = 'new';
+      }
+    }
+    
+    setAssignmentSubmissionStatus(statusMap);
+  }, [moodleId, getCourseSections, getMySubmission]);
+
   const fetchCourseContent = useCallback(async () => {
     if (!moodleId) return;
     try {
@@ -143,11 +186,16 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
         });
         setAssignments(allAssignments);
         setLectures(allLectures);
+        
+        // Fetch submission status for all assignments
+        if (allAssignments.length > 0) {
+          fetchAssignmentSubmissionStatus(allAssignments);
+        }
       }
     } catch (error) {
       console.error('Error fetching course content:', error);
     }
-  }, [moodleId, getCourseSections]);
+  }, [moodleId, getCourseSections, fetchAssignmentSubmissionStatus]);
 
   useEffect(() => {
     if (isVisible && (courseId || moodleId)) {
@@ -183,6 +231,7 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
   }, [isVisible, courseId, moodleId, slideAnim, fadeAnim, fetchCourseContent]);
 
   const handleQuizPress = (quiz: Quiz) => {
+    console.log('Quiz clicked:', quiz);
     if (onQuizClick) {
       onQuizClick(quiz);
     }
@@ -215,7 +264,7 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
       >
         {/* Header */}
         <View style={styles.sidebarHeader}>
-          <StyledText style={styles.sidebarTitle}>Course Content</StyledText>
+          {/* <StyledText style={styles.sidebarTitle}>Course Content</StyledText> */}
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X size={20} color="#000" />
           </TouchableOpacity>
@@ -305,12 +354,13 @@ const CourseSidebar: React.FC<CourseSidebarProps> = ({
               </View>
             ) : assignments.length > 0 ? (
               assignments.map((assignment) => {
+                const submissionStatus = assignmentSubmissionStatus[assignment.id.toString()];
                 const contentItem: ContentItem = {
                   id: assignment.id.toString(),
                   title: assignment.name,
                   subtitle: 'Assignment',
                   type: 'assignment',
-                  isCompleted: true, // You might want to track completion status
+                  isCompleted: submissionStatus === 'submitted', // Only checked if status is 'submitted'
                   onPress: () => handleAssignmentPress(assignment),
                 };
                 return <ContentCard key={assignment.id} item={contentItem} />;
@@ -372,9 +422,10 @@ const styles = StyleSheet.create({
   },
   sidebarHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical:20,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },

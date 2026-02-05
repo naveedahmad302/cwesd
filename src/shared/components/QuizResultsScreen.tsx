@@ -15,7 +15,7 @@ import { showErrorToast } from '../../utils/toast';
 interface QuizData {
   title: string;
   description: string;
-  status: 'Completed' | 'Pending' | 'Failed' | 'Passed';
+  status: 'Completed' | 'Pending' | 'Failed' | 'Passed' | 'Passed (Final)' | 'Completed (Final)';
   marks: string;
   duration: string;
   totalPoints: number;
@@ -35,6 +35,12 @@ interface QuizResultsScreenProps {
   duration?: number;
   maxAttempts?: number;
   attemptsUsed?: number;
+  currentAttempt?: {
+    attemptNumber: number;
+    score: number;
+    maxPossibleScore: number;
+    status: string;
+  };
   questions?: number;
   availableFrom?: string;
   availableTo?: string;
@@ -56,6 +62,7 @@ const QuizScreen: React.FC<QuizResultsScreenProps> = ({
   duration,
   maxAttempts,
   attemptsUsed,
+  currentAttempt,
   questions,
   availableFrom,
   availableTo,
@@ -66,20 +73,43 @@ const QuizScreen: React.FC<QuizResultsScreenProps> = ({
   onNavigateToLecture,
   courseId,
   moodleId,
-  passingScore = 60
+  passingScore = 50
 }) => {
   const [showSidebar, setShowSidebar] = useState(false);
+  
+  // Debug logging
+  console.log('=== QuizResultsScreen PROPS ===');
+  console.log('title:', title);
+  console.log('marksObtained:', marksObtained);
+  console.log('totalPoints:', totalPoints);
+  console.log('maxAttempts:', maxAttempts);
+  console.log('attemptsUsed:', attemptsUsed);
+  console.log('currentAttempt:', currentAttempt);
+  console.log('================================');
   
   // Calculate percentage and determine status
   const percentage = marksObtained && totalPoints ? Math.round((marksObtained / totalPoints) * 100) : 0;
   const hasPassed = percentage >= passingScore;
+  const usedAttempts = currentAttempt?.attemptNumber || attemptsUsed || 0;
+  const maxAttemptsValue = maxAttempts || 1;
   
   const quizData: QuizData = {
     title: title || 'Quiz Results',
-    description: description || `You scored ${percentage}%${hasPassed ? ' and passed' : ' - try again'}!`,
-    status: marksObtained !== undefined && totalPoints !== undefined 
-      ? (hasPassed ? 'Passed' : 'Completed') 
-      : 'Pending',
+    description: description || (() => {
+      if (usedAttempts >= maxAttemptsValue && maxAttemptsValue > 0) {
+        return `Attempt ${usedAttempts} of ${maxAttemptsValue} completed. You scored ${percentage}%. ${hasPassed ? 'Congratulations!' : 'Review the material and try similar quizzes.'}`;
+      }
+      return `Attempt ${usedAttempts} completed. You scored ${percentage}%${hasPassed ? ' and passed!' : ' - keep practicing!'}`;
+    })(),
+    status: (() => {
+      if (marksObtained !== undefined && totalPoints !== undefined) {
+        if (usedAttempts >= maxAttemptsValue && maxAttemptsValue > 0) {
+          return hasPassed ? 'Passed (Final)' : 'Completed (Final)';
+        }
+        return hasPassed ? 'Passed' : 'Completed';
+      }
+      return 'Pending';
+    })(),
     marks: marksObtained !== undefined && totalPoints !== undefined ? `${marksObtained}/${totalPoints}` : '0/0',
     duration: duration ? `${duration} minutes` : 'Not specified',
     totalPoints: totalPoints || 0,
@@ -152,115 +182,115 @@ const QuizScreen: React.FC<QuizResultsScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header with Menu */}
-      <TouchableOpacity style={styles.header} onPress={handleHeaderClick}>
-        <View style={styles.menuButton}>
-          <Menu size={17} color="#000" />
-        </View>
-        <Text style={styles.headerTitle}>Course Content</Text>
-      </TouchableOpacity>
-
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header Icon */}
-        <View style={styles.iconContainer}>
-          <View style={styles.questionIcon}>
-            <Text style={styles.iconText}>?</Text>
+      <ScrollView style={styles.scrollView}>
+        {/* Header with Menu */}
+        <TouchableOpacity style={styles.header} onPress={handleHeaderClick}>
+          <View style={styles.menuButton}>
+            <Menu size={17} color="#000" />
           </View>
-        </View>
-
-        {/* Title */}
-        <Text style={styles.title}>{quizData.title}</Text>
-
-        {/* Description */}
-        <Text style={styles.description}>{quizData.description}</Text>
-
-        {/* Status Card */}
-        <View style={[
-          styles.statusCard,
-          { 
-            backgroundColor: quizData.status === 'Passed' ? '#e8f5e9' : 
-                           quizData.status === 'Failed' ? '#ffebee' : '#fff3e0',
-            borderColor: quizData.status === 'Passed' ? '#4caf50' : 
-                         quizData.status === 'Failed' ? '#f44336' : '#ff9800'
-          }
-        ]}>
-          <View style={styles.statusContent}>
-            <View style={[
-              styles.checkmarkContainer,
-              { 
-                backgroundColor: quizData.status === 'Passed' ? '#4caf50' : 
-                               quizData.status === 'Failed' ? '#f44336' : '#ff9800'
-              }
-            ]}>
-              <CircleCheckBig size={16} color="#fff" />
-            </View>
-            <View>
-              <Text style={styles.statusText}>{quizData.status}</Text>
-              {quizData.percentage !== undefined && (
-                <Text style={styles.percentageText}>{quizData.percentage}%</Text>
-              )}
-            </View>
-          </View>
-          <Text style={styles.marksText}>{quizData.marks}</Text>
-        </View>
-
-        {/* Duration and Total Points */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Duration</Text>
-            <Text style={styles.infoValue}>{quizData.duration}</Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Total Points</Text>
-            <Text style={styles.infoValue}>{quizData.totalPoints}</Text>
-          </View>
-        </View>
-
-        {/* Questions and Max Attempts */}
-        <View style={styles.infoSection}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Questions</Text>
-            <Text style={styles.infoValue}>{quizData.questions}</Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Attempts</Text>
-            <Text style={styles.infoValue}>{quizData.attemptsUsed}/{quizData.maxAttempts}</Text>
-          </View>
-        </View>
-
-        {/* Available Date Range */}
-        <View style={styles.availableSection}>
-          <Text style={styles.infoLabel}>Available</Text>
-          <Text style={styles.dateRangeText}>
-            {quizData.availableFrom} - {quizData.availableTo}
-          </Text>
-        </View>
-
-        {/* Retake Quiz Button - Show always, but disable when no attempts left */}
-        <TouchableOpacity
-          style={[
-            styles.retakeButton,
-            (quizData.attemptsUsed || 0) >= quizData.maxAttempts && styles.retakeButtonDisabled
-          ]}
-          onPress={handleRetakeQuiz}
-          disabled={(quizData.attemptsUsed || 0) >= quizData.maxAttempts}
-          activeOpacity={0.7}
-        >
-          <CirclePlay size={20} color={(quizData.attemptsUsed || 0) >= quizData.maxAttempts ? '#999' : '#fff'} />
-          <Text style={[
-            styles.retakeButtonText,
-            (quizData.attemptsUsed || 0) >= quizData.maxAttempts && styles.retakeButtonTextDisabled
-          ]}>
-            {(quizData.attemptsUsed || 0) >= quizData.maxAttempts ? 'Attempt limit reached' : 'Retake Quiz'}
-          </Text>
+          <Text style={styles.headerTitle}>Course Content</Text>
         </TouchableOpacity>
+
+        <View style={styles.container}>
+          {/* Header Icon */}
+          <View style={styles.iconContainer}>
+            <View style={styles.questionIcon}>
+              <Text style={styles.iconText}>?</Text>
+            </View>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.title}>{quizData.title}</Text>
+
+          {/* Description */}
+          <Text style={styles.description}>{quizData.description}</Text>
+
+          {/* Status Card */}
+          <View style={[
+            styles.statusCard,
+            { 
+              backgroundColor: (quizData.status === 'Passed' || quizData.status === 'Passed (Final)') ? '#e8f5e9' : 
+                             (quizData.status === 'Failed' || quizData.status === 'Completed (Final)') ? '#ffebee' : '#fff3e0',
+              borderColor: (quizData.status === 'Passed' || quizData.status === 'Passed (Final)') ? '#4caf50' : 
+                           (quizData.status === 'Failed' || quizData.status === 'Completed (Final)') ? '#f44336' : '#ff9800'
+            }
+          ]}>
+            <View style={styles.statusContent}>
+              <View style={[
+                styles.checkmarkContainer,
+                { 
+                  backgroundColor: (quizData.status === 'Passed' || quizData.status === 'Passed (Final)') ? '#4caf50' : 
+                                 (quizData.status === 'Failed' || quizData.status === 'Completed (Final)') ? '#f44336' : '#ff9800'
+                }
+              ]}>
+                <CircleCheckBig size={16} color="#fff" />
+              </View>
+              <View>
+                <Text style={styles.statusText}>{quizData.status}</Text>
+                {quizData.percentage !== undefined && (
+                  <Text style={styles.percentageText}>{quizData.percentage}%</Text>
+                )}
+              </View>
+            </View>
+            <Text style={styles.marksText}>{quizData.marks}</Text>
+          </View>
+
+          {/* Duration and Total Points */}
+          <View style={styles.infoSection}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Duration</Text>
+              <Text style={styles.infoValue}>{quizData.duration}</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Total Points</Text>
+              <Text style={styles.infoValue}>{quizData.totalPoints}</Text>
+            </View>
+          </View>
+
+          {/* Questions and Max Attempts */}
+          <View style={styles.infoSection}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Questions</Text>
+              <Text style={styles.infoValue}>{quizData.questions}</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Attempts</Text>
+              <Text style={styles.infoValue}>{quizData.attemptsUsed}/{quizData.maxAttempts}</Text>
+            </View>
+          </View>
+
+          {/* Available Date Range */}
+          <View style={styles.availableSection}>
+            <Text style={styles.infoLabel}>Available</Text>
+            <Text style={styles.dateRangeText}>
+              {quizData.availableFrom} - {quizData.availableTo}
+            </Text>
+          </View>
+
+          {/* Retake Quiz Button - Show always, but disable when no attempts left */}
+          <TouchableOpacity
+            style={[
+              styles.retakeButton,
+              (quizData.attemptsUsed || 0) >= quizData.maxAttempts && styles.retakeButtonDisabled
+            ]}
+            onPress={handleRetakeQuiz}
+            disabled={(quizData.attemptsUsed || 0) >= quizData.maxAttempts}
+            activeOpacity={0.7}
+          >
+            <CirclePlay size={20} color={(quizData.attemptsUsed || 0) >= quizData.maxAttempts ? '#999' : '#fff'} />
+            <Text style={[
+              styles.retakeButtonText,
+              (quizData.attemptsUsed || 0) >= quizData.maxAttempts && styles.retakeButtonTextDisabled
+            ]}>
+              {(quizData.attemptsUsed || 0) >= quizData.maxAttempts ? 'Attempt limit reached' : 'Retake Quiz'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-      </View>
       
-      {/* Course Sidebar */}
-      <CourseSidebar 
-        isVisible={showSidebar} 
+      {/* Course Sidebar - Overlay */}
+      <CourseSidebar
+        isVisible={showSidebar}
         onClose={handleCloseSidebar}
         onQuizClick={handleQuizClick}
         onAssignmentClick={handleAssignmentClick}
@@ -277,13 +307,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  container: {
+  scrollView: {
     flex: 1,
+    
+  },
+  container: {
     backgroundColor: 'white',
-    margin: 20,
-    borderWidth:1,
-    borderColor:'#ccc',
-    borderRadius:12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 12,
+    margin: 16,
   },
   header: {
     backgroundColor:'#F8F9FA',
@@ -314,9 +348,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   questionIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#fce4ec',
     justifyContent: 'center',
     alignItems: 'center',
@@ -324,13 +358,13 @@ const styles = StyleSheet.create({
     borderColor: '#ec407a',
   },
   iconText: {
-    fontSize: 32,
+    fontSize: 24,
     color: '#ec407a',
     fontWeight: '600',
     fontFamily: 'FiraCode-Regular',
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1a1a1a',
     marginBottom: 12,
@@ -348,11 +382,11 @@ const styles = StyleSheet.create({
   statusCard: {
     backgroundColor: '#e8f5e9',
     borderRadius: 8,
-    padding: 16,
+    padding: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#4dba519f',
   },
@@ -383,7 +417,7 @@ const styles = StyleSheet.create({
     fontFamily: 'FiraCode-Regular',
   },
   marksText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#666',
     fontFamily: 'FiraCode-Regular',
@@ -393,7 +427,7 @@ const styles = StyleSheet.create({
     
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 18,
     paddingHorizontal: 8,
   },
   infoItem: {
