@@ -17,7 +17,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
       <View style={styles.sectionContainer}>
         <StyledText style={styles.sectionTitle}>Navigation</StyledText>
-        {state.routes.filter(route => ['Dashboard', 'Students', 'Grade Assignments', 'Quizzes'].includes(route.name)).map((route) => {
+        {state.routes.filter(route => ['Dashboard', 'Courses', 'Students', 'Grade Assignments', 'Quizzes'].includes(route.name)).map((route) => {
           const IconComponent = getIconComponent(route.name);
           return (
             <DrawerItem 
@@ -80,6 +80,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 const getIconComponent = (routeName: string) => {
   const iconMap: { [key: string]: React.ComponentType<any> } = {
     'Dashboard': House,
+    'Courses': BookOpen,
     'Students': Users,
     'Grade Assignments': FileCheck,
     'Quizzes': HelpCircle

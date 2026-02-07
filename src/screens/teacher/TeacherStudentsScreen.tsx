@@ -73,12 +73,12 @@ const TeacherStudentsScreen = () => {
 
   const filteredStudents = useMemo(() => {
     return students.filter((student: any) => {
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.email.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchesStatus = selectedStatus === 'All Status' || student.status === selectedStatus;
-      
+
       return matchesSearch && matchesStatus;
     });
   }, [searchQuery, selectedStatus, students]);
@@ -87,7 +87,7 @@ const TeacherStudentsScreen = () => {
   const stats = useMemo(() => {
     const totalStudents = students.length;
     const activeStudents = students.filter(s => s.status === 'Active').length;
-    const avgProgress = students.length > 0 
+    const avgProgress = students.length > 0
       ? Math.round(students.reduce((sum, s) => sum + s.progress, 0) / students.length)
       : 0;
     const highPerformers = students.filter(s => s.progress >= 80).length;
@@ -131,7 +131,7 @@ const TeacherStudentsScreen = () => {
           <RefreshControl refreshing={refreshing || isFetching} onRefresh={onRefresh} colors={['#E56B8C']} />
         }
       >
-        <View style={styles.buttonRow}>
+        {/* <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.inviteButton}>
             <UserPlus color="white" size={20} />
             <StyledText style={styles.inviteButtonText}>Invite Students</StyledText>
@@ -140,43 +140,45 @@ const TeacherStudentsScreen = () => {
             <Mail color="black" size={20} />
             <StyledText style={styles.announcementButtonText}>Send Announcement</StyledText>
           </TouchableOpacity>
-        </View>
-        
-        <TouchableOpacity style={styles.exportButton}>
+        </View> */}
+
+        {/* <TouchableOpacity style={styles.exportButton}>
           <Download color="black" size={20} />
           <StyledText style={styles.exportButtonText}>Export List</StyledText>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
-        <View style={styles.card}>
-          <View>
-            <StyledText style={styles.cardTitle}>Total Students</StyledText>
-            <StyledText style={styles.cardNumber}>{stats.totalStudents}</StyledText>
+        <View style={styles.statsContainer}>
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Total Students</StyledText>
+              <StyledText style={styles.cardValue}>{stats.totalStudents}</StyledText>
+            </View>
+            {/* <Users color="black" size={40} /> */}
           </View>
-          <Users color="black" size={40} />
-        </View>
 
-        <View style={styles.card}>
-          <View>
-            <StyledText style={styles.cardTitle}>Active Students</StyledText>
-            <StyledText style={styles.cardNumber}>{stats.activeStudents}</StyledText>
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Active Students</StyledText>
+              <StyledText style={styles.cardValue}>{stats.activeStudents}</StyledText>
+            </View>
+            {/* <GraduationCap color="black" size={40} /> */}
           </View>
-          <GraduationCap color="black" size={40} />
-        </View>
 
-        <View style={styles.card}>
-          <View>
-            <StyledText style={styles.cardTitle}>Avg. Progress</StyledText>
-            <StyledText style={styles.cardNumber}>{stats.avgProgress}%</StyledText>
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Avg. Progress</StyledText>
+              <StyledText style={styles.cardValue}>{stats.avgProgress}%</StyledText>
+            </View>
+            {/* <TrendingUp color="black" size={40} /> */}
           </View>
-          <TrendingUp color="black" size={40} />
-        </View>
 
-        <View style={styles.card}>
-          <View>
-            <StyledText style={styles.cardTitle}>High Performers</StyledText>
-            <StyledText style={styles.cardNumber}>{stats.highPerformers}</StyledText>
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>High Performers</StyledText>
+              <StyledText style={styles.cardValue}>{stats.highPerformers}</StyledText>
+            </View>
+            {/* <Award color="black" size={40} /> */}
           </View>
-          <Award color="black" size={40} />
         </View>
 
         <View style={styles.searchFilterContainer}>
@@ -191,7 +193,7 @@ const TeacherStudentsScreen = () => {
             />
           </View>
           <View style={styles.filterContainer}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.filterButton}
               onPress={() => setShowStatusDropdown(!showStatusDropdown)}
             >
@@ -218,8 +220,8 @@ const TeacherStudentsScreen = () => {
           <StyledText style={styles.tableHeaderText}>{filteredStudents.length} of {students.length} students</StyledText>
         </View>
 
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={true}
           style={styles.horizontalScrollContainer}
         >
@@ -271,9 +273,6 @@ const TeacherStudentsScreen = () => {
                   <TouchableOpacity style={styles.actionButton}>
                     <MessageSquare color="#888888" size={16} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <MoreVertical color="#888888" size={16} />
-                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -293,12 +292,12 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   buttonRow: {
-    width:'65%',
+    width: '65%',
     flexDirection: 'column',
     marginBottom: 6,
   },
   inviteButton: {
-    
+
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E56B8C',
@@ -347,24 +346,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  // Stats container for grid layout
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
   card: {
-    backgroundColor: '#fff',
-    padding: 20,
+    width: '48%',
+    backgroundColor: 'white',
     borderRadius: 12,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    padding: 15,
+    marginBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cardTitle: {
-    fontSize: 16,
-    color: 'black',
-    marginBottom: 4,
+    fontSize: 13,
+    color: '#888888',
   },
-  cardNumber: {
-    fontSize: 24,
+  cardValue: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: 'black',
   },

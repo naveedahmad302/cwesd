@@ -91,7 +91,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({
       }, 1000);
       return () => clearTimeout(timer);
     } else if (timeLeft === 0 && !isSubmitting) {
-      handleSubmitQuiz();
+      // handleSubmitQuiz();
     }
   }, [timeLeft, isSubmitting]);
 

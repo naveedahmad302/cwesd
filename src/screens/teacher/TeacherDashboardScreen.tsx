@@ -1,9 +1,17 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, TextInput, Dimensions } from 'react-native';
 import { useAppSelector } from '../../store';
-import { Video, Plus, FileCheck, BookOpen, Users, MessageSquare, Clock, Calendar, MonitorPlay } from 'lucide-react-native';
+import { Video, Plus, FileCheck, BookOpen, Users, MessageSquare, Clock, Calendar, MonitorPlay, Search } from 'lucide-react-native';
 import CourseCard from '../../shared/components/CourseCard';
+import ScheduleWebinarModal from './components/ScheduleWebinarModal';
 import { useGetCoursesQuery, useGetTeacherStatsQuery } from '../../store/api';
+import { useGetEventsQuery, useLazyGetEventsQuery } from '../../store/api';
+import { useGetAssignmentsQuery, useLazyGetAssignmentsQuery } from '../../store/api/moodleApi';
+
+const { width, height } = Dimensions.get('window');
+const isSmallScreen = width < 375;
+const isMediumScreen = width >= 375 && width < 414;
+const isLargeScreen = width >= 414;
 
 const TeacherDashboardScreen = () => {
   const user = useAppSelector(state => state.user.user);
@@ -20,12 +28,29 @@ const TeacherDashboardScreen = () => {
     refetch: refetchStats,
   } = useGetTeacherStatsQuery();
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showWebinarModal, setShowWebinarModal] = useState(false);
+  const [webinarForm, setWebinarForm] = useState({
+    title: '',
+    description: '',
+    date: '',
+    time: '',
+    duration: '60',
+    meetLink: '',
+    courseId: '',
+    sectionId: ''
+  });
+  const [sections, setSections] = useState([
+    { id: '1', name: 'Section 1' },
+    { id: '2', name: 'Section 2' },
+    { id: '3', name: 'Section 3' },
+  ]);
 
   const courses = useMemo(() => {
-    const raw = (coursesResponse as any)?.courses ?? coursesResponse?.courses;
-    const list = Array.isArray(raw) ? raw : [];
-    return list.map((course: any) => ({
+    const raw = coursesResponse?.courses || [];
+    return raw.map((course: any) => ({
       id: course._id,
+      moodleId: course.moodleId, // Add moodleId for API calls
       title: course.fullname,
       instructor: user?.name || 'Teacher',
       lessons: course.numSections || 0,
@@ -40,35 +65,184 @@ const TeacherDashboardScreen = () => {
     }));
   }, [coursesResponse, user?.name]);
 
+  // Use lazy queries for dynamic data fetching
+  const [getEvents] = useLazyGetEventsQuery();
+  const [getAssignments] = useLazyGetAssignmentsQuery();
+  const [allEvents, setAllEvents] = useState<any[]>([]);
+  const [allAssignments, setAllAssignments] = useState<any[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+
+  // Fetch events and assignments for all courses
+  useEffect(() => {
+    const fetchAllData = async () => {
+      if (courses.length === 0) return;
+      
+      try {
+        setEventsLoading(true);
+        setAssignmentsLoading(true);
+        
+        // Fetch events for all courses
+        const eventsPromises = courses.map((course: any) => 
+          getEvents({ courseId: course.moodleId.toString() }).unwrap()
+        );
+        const eventsResults = await Promise.all(eventsPromises);
+        const allEventsData = eventsResults.flatMap((result: any) => result.events || []);
+        setAllEvents(allEventsData);
+        
+        // Fetch assignments for all courses
+        const assignmentsPromises = courses.map((course: any) => 
+          getAssignments({ 
+            courseId: course.moodleId.toString(), 
+            sectionNumber: '0', 
+            courseIds: course.moodleId.toString(), 
+            includenotenrolled: true 
+          }).unwrap()
+        );
+        const assignmentsResults = await Promise.all(assignmentsPromises);
+        console.log('Assignments API Results:', assignmentsResults);
+        const allAssignmentsData = assignmentsResults.flatMap((result: any) => result.data?.courses || []);
+        console.log('All Assignments Data:', allAssignmentsData);
+        setAllAssignments(allAssignmentsData);
+        
+      } catch (error) {
+        console.error('Error fetching course data:', error);
+      } finally {
+        setEventsLoading(false);
+        setAssignmentsLoading(false);
+      }
+    };
+
+    fetchAllData();
+  }, [courses, getEvents, getAssignments]);
+  
+  const isLoading = coursesLoading || statsLoading || eventsLoading || assignmentsLoading;
+  const isFetching = coursesFetching || statsFetching;
+
+  // Filter courses based on search query
+  const filteredCourses = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return courses;
+    }
+    return courses.filter((course: any) => 
+      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.level.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [courses, searchQuery]);
+
+  const totalAssignments = useMemo(() => {
+    return allAssignments.reduce((total: number, course: any) => {
+      return total + (course.assignments?.length || 0);
+    }, 0);
+  }, [allAssignments]);
+  const upcomingWebinars = useMemo(() => {
+    const events = allEvents || [];
+    const now = new Date();
+    return events
+      .filter((event: any) => new Date(event.start) > now) // Only future events
+      .map((event: any) => ({
+        id: event._id || event.id,
+        title: event.title,
+        date: new Date(event.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        time: new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        students: Math.floor(Math.random() * 50) + 10, // Placeholder until we have enrollment data
+        meetLink: event.meetLink,
+      }));
+  }, [allEvents]);
+
   const stats = useMemo(() => {
     const raw = statsResponse;
     if (raw && (raw.totalCourses != null || raw.total_courses != null)) {
       return {
         totalCourses: raw.totalCourses ?? raw.total_courses ?? 0,
         activeCourses: raw.activeCourses ?? raw.active_courses ?? 0,
+        totalAssignments: raw.totalAssignments ?? raw.total_assignments ?? totalAssignments,
+        upcomingWebinars: upcomingWebinars.length,
         pendingGrades: raw.pendingGrades ?? raw.pending_grades ?? 0,
         unreadMessages: raw.unreadMessages ?? raw.unread_messages ?? 0,
       };
     }
+    // Calculate from courses if no stats API
+    const activeCoursesCount = courses.filter((c: any) => c.status === 'in-progress').length;
     return {
       totalCourses: courses.length,
-      activeCourses: courses.filter((c: any) => c.status === 'in-progress').length,
-      pendingGrades: 12,
-      unreadMessages: 8,
+      activeCourses: activeCoursesCount,
+      totalAssignments: totalAssignments,
+      upcomingWebinars: upcomingWebinars.length,
+      pendingGrades: 0, // Will be implemented with grades API
+      unreadMessages: 0, // Will be implemented with messages API
     };
-  }, [statsResponse, courses]);
+  }, [statsResponse, courses, upcomingWebinars]);
 
-  const isLoading = coursesLoading || statsLoading;
-  const isFetching = coursesFetching || statsFetching;
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetchCourses(), refetchStats()]);
+    await Promise.all([
+      refetchCourses(), 
+      refetchStats()
+    ]);
+    // Trigger refetch of events and assignments through useEffect
+    if (courses.length > 0) {
+      try {
+        setEventsLoading(true);
+        setAssignmentsLoading(true);
+        
+        // Fetch events for all courses
+        const eventsPromises = courses.map((course: any) => 
+          getEvents({ courseId: course.moodleId.toString() }).unwrap()
+        );
+        const eventsResults = await Promise.all(eventsPromises);
+        const allEventsData = eventsResults.flatMap((result: any) => result.events || []);
+        setAllEvents(allEventsData);
+        
+        // Fetch assignments for all courses
+        const assignmentsPromises = courses.map((course: any) => 
+          getAssignments({ 
+            courseId: course.moodleId.toString(), 
+            sectionNumber: '0', 
+            courseIds: course.moodleId.toString(), 
+            includenotenrolled: true 
+          }).unwrap()
+        );
+        const assignmentsResults = await Promise.all(assignmentsPromises);
+        const allAssignmentsData = assignmentsResults.flatMap((result: any) => result.data?.courses || []);
+        setAllAssignments(allAssignmentsData);
+        
+      } catch (error) {
+        console.error('Error refreshing course data:', error);
+      } finally {
+        setEventsLoading(false);
+        setAssignmentsLoading(false);
+      }
+    }
     setRefreshing(false);
-  }, [refetchCourses, refetchStats]);
+  }, [refetchCourses, refetchStats, courses, getEvents, getAssignments]);
 
   const handleScheduleWebinar = () => {
-    // Navigate to webinar scheduling screen
-    console.log('Navigate to schedule webinar');
+    console.log('handleScheduleWebinar called');
+    setShowWebinarModal(true);
+    console.log('showWebinarModal set to true');
+  };
+
+  const handleCloseWebinarModal = () => {
+    setShowWebinarModal(false);
+    setWebinarForm({
+      title: '',
+      description: '',
+      date: '',
+      time: '',
+      duration: '60',
+      meetLink: '',
+      courseId: '',
+      sectionId: ''
+    });
+  };
+
+  const handleCreateWebinar = () => {
+    // TODO: Implement webinar creation API call
+    console.log('Creating webinar:', webinarForm);
+    handleCloseWebinarModal();
   };
 
   const handleCreateModule = () => {
@@ -81,6 +255,40 @@ const TeacherDashboardScreen = () => {
     console.log('Navigate to grade assignments');
   };
 
+  const renderCourseItem = useCallback(({ item }: { item: any }) => (
+    <CourseCard key={item.id} course={item} />
+  ), []);
+
+  const renderAssignmentItem = useCallback(({ item }: { item: any }) => (
+    <View key={item.id} style={styles.assignmentItem}>
+      <View style={styles.assignmentContent}>
+        <Text style={styles.studentName}>{item.studentName}</Text>
+        <Text style={styles.assignmentTitle}>{item.assignmentTitle}</Text>
+      </View>
+      <View style={styles.timeContainer}>
+        <Clock color="#888888" size={14} />
+        <Text style={styles.timeText}>{item.timeAgo}</Text>
+      </View>
+    </View>
+  ), []);
+
+  const renderWebinarItem = useCallback(({ item }: { item: any }) => (
+    <View key={item.id} style={styles.webinarItem}>
+      <View style={styles.webinarContent}>
+        <Text style={styles.webinarTitle}>{item.title}</Text>
+        <View style={styles.webinarDateTime}>
+          <Calendar color="#888888" size={14} />
+          <Text style={styles.webinarDateText}>{item.date}</Text>
+          <Text style={styles.webinarTimeText}>{item.time}</Text>
+        </View>
+      </View>
+      <View style={styles.webinarStudentsContainer}>
+        <Users color="#888888" size={14} />
+        <Text style={styles.webinarStudentsText}>{item.students} Students</Text>
+      </View>
+    </View>
+  ), []);
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -91,204 +299,196 @@ const TeacherDashboardScreen = () => {
   }
   
   return (
-    <ScrollView
+    <>
+    <FlatList
       style={styles.container}
       refreshControl={
         <RefreshControl refreshing={refreshing || isFetching} onRefresh={onRefresh} colors={['#E56B8C']} />
       }
-    >
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={[styles.button, styles.scheduleButton]}
-          onPress={handleScheduleWebinar}
-        >
-          <Video color="white" size={20} />
-          <Text style={styles.scheduleButtonText}>Schedule Webinar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handleCreateModule}
-        >
-          <Plus color="black" size={20} />
-          <Text style={styles.buttonText}>Create Module</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handleGradeAssignments}
-        >
-          <FileCheck color="black" size={20} />
-          <Text style={styles.buttonText}>Grade Assignments</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.card}>
-        <View>
-          <Text style={styles.cardTitle}>My Courses</Text>
-          <Text style={styles.cardValue}>{stats.totalCourses}</Text>
-        </View>
-        <BookOpen color="black" size={40} />
-      </View>
-
-      <View style={styles.card}>
-        <View>
-          <Text style={styles.cardTitle}>Active Courses</Text>
-          <Text style={styles.cardValue}>{stats.activeCourses}</Text>
-        </View>
-        <Users color="black" size={40} />
-      </View>
-
-      <View style={styles.card}>
-        <View>
-          <Text style={styles.cardTitle}>Pending Grades</Text>
-          <Text style={styles.cardValue}>{stats.pendingGrades}</Text>
-        </View>
-        <FileCheck color="black" size={40} />
-      </View>
-
-      <View style={styles.card}>
-        <View>
-          <Text style={styles.cardTitle}>Unread Messages</Text>
-          <Text style={styles.cardValue}>{stats.unreadMessages}</Text>
-        </View>
-        <MessageSquare color="black" size={40} />
-      </View>
-
-      <View style={styles.coursesSection}>
-        <Text style={styles.sectionTitle}>My Courses</Text>
-        {courses.length > 0 ? (
-          courses.map((course) => (
-            <CourseCard key={course.id} course={course} />
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No courses found</Text>
-            <Text style={styles.emptyStateSubtext}>Start by creating your first module</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.pendingAssignmentsSection}>
-        <View style={styles.pendingAssignmentsCard}>
-          <Text style={styles.sectionTitle}>Pending Assignments</Text>
-          <View style={styles.titleDivider} />
-          {[
-            { id: '1', studentName: 'Sarah Johnson', assignmentTitle: 'Business Model Canvas', timeAgo: '2 hours ago' },
-            { id: '2', studentName: 'Emily Davis', assignmentTitle: 'Market Research', timeAgo: '5 hours ago' },
-            { id: '3', studentName: 'Maria Garcia', assignmentTitle: 'Business Model Canvas', timeAgo: '1 day ago' },
-          ].map((assignment) => (
-            <View key={assignment.id} style={styles.assignmentItem}>
-              <View style={styles.assignmentContent}>
-                <Text style={styles.studentName}>{assignment.studentName}</Text>
-                <Text style={styles.assignmentTitle}>{assignment.assignmentTitle}</Text>
+      data={[
+        { type: 'header' },
+        
+        { type: 'stats' },
+        { type: 'teachingHeader' },
+        { type: 'courses', data: filteredCourses },
+        { type: 'webinars', data: upcomingWebinars },
+      ]}
+      renderItem={({ item }) => {
+        switch (item.type) {
+          case 'header':
+            return (
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity 
+                  style={[styles.button, styles.scheduleButton]}
+                  onPress={handleScheduleWebinar}
+                >
+                  <Video color="white" size={20} />
+                  <Text style={styles.scheduleButtonText}>Schedule Webinar</Text>
+                </TouchableOpacity>
+                {/* <TouchableOpacity 
+                  style={styles.button}
+                  onPress={handleCreateModule}
+                >
+                  <Plus color="black" size={20} />
+                  <Text style={styles.buttonText}>Create Module</Text>
+                </TouchableOpacity> */}
+                <TouchableOpacity 
+                  style={styles.button}
+                  onPress={handleGradeAssignments}
+                >
+                  <FileCheck color="black" size={20} />
+                  <Text style={styles.buttonText}>Grade Assignments</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.timeContainer}>
-                <Clock color="#888888" size={14} />
-                <Text style={styles.timeText}>{assignment.timeAgo}</Text>
-              </View>
-            </View>
-          ))}
-          <TouchableOpacity style={styles.viewAllButton}>
-            <Text style={styles.viewAllButtonText}>View All Assignments</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            );
+          
+          case 'stats':
+            return (
+              <View style={styles.statsContainer}>
+                <View style={styles.card}>
+                  <View>
+                    <Text style={styles.cardTitle}>My Courses</Text>
+                    <Text style={styles.cardValue}>{stats.totalCourses}</Text>
+                  </View>
+                  {/* <BookOpen color="black" size={40} /> */}
+                </View>
 
-      <View style={styles.upcomingWebinarsSection}>
-        <View style={styles.upcomingWebinarsCard}>
-        <Text style={styles.sectionTitle}>Upcoming Webinars</Text>
-        <View style={styles.titleDivider} />
-          {[
-            { id: '1', title: 'React Native Advanced', date: '28 Jan', time: '2:00 PM', students: 45 },
-            { id: '2', title: 'JavaScript Best Practices', date: '30 Jan', time: '3:00 PM', students: 32 },
-            { id: '3', title: 'Mobile App Design', date: '2 Feb', time: '4:00 PM', students: 28 },
-          ].map((webinar) => (
-            <View key={webinar.id} style={styles.webinarItem}>
-              <View style={styles.webinarContent}>
-                <Text style={styles.webinarTitle}>{webinar.title}</Text>
-                <View style={styles.webinarDateTime}>
-                  <Calendar color="#888888" size={14} />
-                  <Text style={styles.webinarDateText}>{webinar.date}</Text>
-                  <Text style={styles.webinarTimeText}>{webinar.time}</Text>
+                <View style={styles.card}>
+                  <View>
+                    <Text style={styles.cardTitle}>Active Courses</Text>
+                    <Text style={styles.cardValue}>{stats.activeCourses}</Text>
+                  </View>
+                  {/* <Users color="black" size={40} /> */}
+                </View>
+
+                <View style={styles.card}>
+                  <View>
+                    <Text style={styles.cardTitle}>Total Assignment</Text>
+                    <Text style={styles.cardValue}>{stats.totalAssignments || 0}</Text>
+                  </View>
+                  {/* <FileCheck color="black" size={40} /> */}
+                </View>
+
+                <View style={styles.card}>
+                  <View>
+                    <Text style={styles.cardTitle}>Upcoming Webinars</Text>
+                    <Text style={styles.cardValue}>{stats.upcomingWebinars || 0}</Text>
+                  </View>
+                  {/* <MessageSquare color="black" size={40" /> */}
                 </View>
               </View>
-              <View style={styles.webinarStudentsContainer}>
-                <MonitorPlay color="#888888" size={14} />
-                <Text style={styles.webinarStudentsText}>{webinar.students} Students</Text>
+            );
+          case 'teachingHeader':
+            return (
+              <View style={styles.teachingHeaderContainer}>
+                <View style={styles.teachingHeaderTop}>
+                  <View style={styles.teachingHeaderLeft}>
+                    <Text style={styles.teachingHeaderTitle}>My Teaching Modules</Text>
+                    <Text style={styles.moduleCountLabel}>{courses.length} modules</Text>
+                  </View>
+                  <TouchableOpacity style={styles.viewAllButton}>
+                    <Text style={styles.viewAllButtonText}>View All</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.searchContainer}>
+                  <Search size={16} color="black" />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search my modules..."
+                    placeholderTextColor="black"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                </View>
               </View>
-            </View>
-          ))}
-          <TouchableOpacity style={styles.scheduleNewButton}>
-            <Text style={styles.scheduleNewButtonText}>Schedule New Webinar</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </ScrollView>
+            );
+          case 'courses':
+            return (
+              <View style={styles.coursesSection}>
+                <Text style={styles.sectionTitle}>
+                  {searchQuery.trim() ? `Search Results (${filteredCourses.length})` : 'My Courses'}
+                </Text>
+                {item.data && item.data.length > 0 ? (
+                  <FlatList
+                    data={item.data}
+                    renderItem={renderCourseItem}
+                    keyExtractor={(course) => course.id}
+                    scrollEnabled={false}
+                  />
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>
+                      {searchQuery.trim() ? 'No modules found matching your search' : 'No courses found'}
+                    </Text>
+                    <Text style={styles.emptyStateSubtext}>
+                      {searchQuery.trim() ? 'Try adjusting your search terms' : 'Start by creating your first module'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            );
+          
+          case 'assignments':
+            return (
+              <View style={styles.pendingAssignmentsSection}>
+                <View style={styles.pendingAssignmentsCard}>
+                  <Text style={styles.sectionTitle}>Pending Assignments</Text>
+                  <View style={styles.titleDivider} />
+                  <FlatList
+                    data={item.data}
+                    renderItem={renderAssignmentItem}
+                    keyExtractor={(assignment) => assignment.id}
+                    scrollEnabled={false}
+                  />
+                  <TouchableOpacity style={styles.viewAllButton}>
+                    <Text style={styles.viewAllButtonText}>View All Assignments</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          
+          case 'webinars':
+            return (
+              <View style={styles.upcomingWebinarsSection}>
+                <View style={styles.upcomingWebinarsCard}>
+                  <Text style={styles.sectionTitle}>Upcoming Webinars</Text>
+                  <View style={styles.titleDivider} />
+                  <FlatList
+                    data={item.data}
+                    renderItem={renderWebinarItem}
+                    keyExtractor={(webinar) => webinar.id}
+                    scrollEnabled={false}
+                  />
+                </View>
+              </View>
+            );
+          
+          default:
+            return null;
+        }
+      }}
+      keyExtractor={(item, index) => `${item.type}-${index}`}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 20 }}
+    />
+    
+    {/* Schedule Webinar Modal */}
+    <ScheduleWebinarModal
+      visible={showWebinarModal}
+      onClose={handleCloseWebinarModal}
+      onCreate={handleCreateWebinar}
+      form={webinarForm}
+      setForm={setWebinarForm}
+    />
+    </>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     backgroundColor: '#F8F9FA',
-  },
-  buttonContainer: {
-    marginBottom: 20,
-  },
-  button: {
-    width: '55%',
-    padding: 10,  
-    paddingHorizontal:15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 8,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  scheduleButton: {
-    backgroundColor: '#E56B8C',
-    borderColor: '#E56B8C',
-  },
-  buttonText: {
-    marginLeft: 10,
-    color: 'black',
-    fontSize: 16,
-  },
-  scheduleButtonText: {
-    marginLeft: 10,
-    color: 'white',
-    fontSize: 16,
-  },
-  card: {
-    padding: 25,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginBottom: 10,
-  },
-  cardTitle: {
-    fontSize: 16,
-    color: '#888888',
-  },
-  cardValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'black',
-  },
-  coursesSection: {
-    marginTop: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 16,
+    paddingTop: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -298,22 +498,161 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     color: '#666',
+  },
+  buttonContainer: {
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    paddingHorizontal: isSmallScreen ? 0 : 20,
+  },
+  button: {
+    width: isSmallScreen ? '68%' : isMediumScreen ? '49%' : '50%',
+    padding: isSmallScreen ? 8 : 10,
+    paddingHorizontal: isSmallScreen ? 12 : 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonText: {
+    marginLeft: 10,
+    color: 'black',
+    fontSize: isSmallScreen ? 14 : 16,
+  },
+  scheduleButton: {
+    backgroundColor: '#E56B8C',
+  },
+  scheduleButtonText: {
+    marginLeft: 10,
+    color: 'white',
+    fontSize: isSmallScreen ? 14 : 16,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: isSmallScreen ? 0 : 20,
+  },
+  card: {
+    width: isSmallScreen ? '48%' : '48%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: isSmallScreen ? 12 : 15,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: isSmallScreen ? 11 : 13,
+    color: '#888888',
+  },
+  cardValue: {
+    fontSize: isSmallScreen ? 20 : 24,
+    fontWeight: 'bold',
+    color: 'black',
+  },
+  coursesSection: {
+    marginTop: 20,
+  },
+  sectionTitle: {
+    fontSize: isSmallScreen ? 18 : 20,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: isSmallScreen ? 12 : 16,
+  },
+  teachingHeaderContainer: {
+    // backgroundColor: 'white',
+    borderRadius: 12,
+    // padding: 20,
+    marginBottom: 20,
+    // borderWidth: 1,
+    // borderColor: '#E0E0E0',
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 2 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 4,
+    // elevation: 3,
+  },
+  teachingHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  teachingHeaderLeft: {
+    flex: 1,
+  },
+  teachingHeaderTitle: {
+    fontSize: isSmallScreen ? 18 : 20,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  moduleCountLabel: {
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#888888',
+  },
+  viewAllButton: {
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: isSmallScreen ? 10 : 12,
+    paddingVertical: isSmallScreen ? 6 : 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  viewAllButtonText: {
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#1a1a1a',
+    fontWeight: '500',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    paddingHorizontal: isSmallScreen ? 12 : 15,
+    // paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  searchInput: {
+    paddingLeft: 10,
+    flex: 1,
+    fontSize: isSmallScreen ? 14 : 16,
+    color: 'black',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: isSmallScreen ? 30 : 40,
   },
   emptyStateText: {
-    fontSize: 18,
+    fontSize: isSmallScreen ? 16 : 18,
     color: '#666',
     marginBottom: 8,
   },
   emptyStateSubtext: {
-    fontSize: 14,
+    fontSize: isSmallScreen ? 12 : 14,
     color: '#999',
     textAlign: 'center',
   },
@@ -325,7 +664,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    padding: 15,
+    padding: isSmallScreen ? 12 : 15,
   },
   titleDivider: {
     height: 1,
@@ -337,79 +676,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius:12,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-    marginBottom: 10,
+    paddingVertical: isSmallScreen ? 10 : 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   assignmentContent: {
     flex: 1,
   },
   studentName: {
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   assignmentTitle: {
-    fontSize: 14,
-    color: 'black',
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#666',
   },
   timeContainer: {
-    backgroundColor:'#F0F0FF',
-    paddingHorizontal:8,
-    paddingVertical:4,
-    borderRadius:12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   timeText: {
-    fontSize: 12,
+    fontSize: isSmallScreen ? 10 : 12,
     color: 'black',
-  },
-  viewAllButton: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    marginTop: 15,
-    borderColor:'#E0E0E0',
-    borderWidth:1
-  },
-  viewAllButtonText: {
-    color: 'black',
-    fontSize: 16,
-    fontWeight: '600',
   },
   upcomingWebinarsSection: {
     marginTop: 20,
-    paddingBottom:70
+    paddingBottom: isSmallScreen ? 50 : 70
   },
   upcomingWebinarsCard: {
     backgroundColor: 'white',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    padding: 15,
+    padding: isSmallScreen ? 12 : 15,
   },
   webinarItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderRadius:12,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-    marginBottom: 10,
+    paddingVertical: isSmallScreen ? 10 : 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   webinarContent: {
     flex: 1,
   },
   webinarTitle: {
-    fontSize: 16,
+    fontSize: isSmallScreen ? 14 : 16,
     fontWeight: '600',
     color: '#1a1a1a',
     marginBottom: 4,
@@ -417,29 +732,25 @@ const styles = StyleSheet.create({
   webinarDateTime: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   webinarDateText: {
-    fontSize: 14,
-    color: 'black',
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#666',
+    marginLeft: 4,
   },
   webinarTimeText: {
-    fontSize: 14,
-    color: 'black',
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#666',
     marginLeft: 8,
   },
   webinarStudentsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor:'#F0F0FF',
-    paddingHorizontal:8,
-    paddingVertical:4,
-    borderRadius:12,
   },
   webinarStudentsText: {
-    fontSize: 12,
-    color: 'black',
+    fontSize: isSmallScreen ? 12 : 14,
+    color: '#666',
+    marginLeft: 4,
   },
   scheduleNewButton: {
     backgroundColor: '#F8F9FA',
@@ -449,13 +760,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 15,
     borderColor:'#E0E0E0',
-    borderWidth:1
+    borderWidth:1,
   },
   scheduleNewButtonText: {
     color: 'black',
     fontSize: 16,
     fontWeight: '600',
-  },
+  }
 });
 
 export default TeacherDashboardScreen;

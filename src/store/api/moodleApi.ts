@@ -4,13 +4,30 @@ import type {
   AssignmentSubmissionResponse,
 } from '../../types/moodle.types';
 import { API_ENDPOINTS } from '../endpoints';
-import { baseQueryWithReauth } from './middleware';
+import { fetchBaseQuery } from '@reduxjs/toolkit/query';
 
 type AssignmentDraftSubmitPayload = FormData | Record<string, unknown>;
 
+// Moodle-specific base query with proper authentication
+const moodleBaseQuery = fetchBaseQuery({
+  baseUrl: 'https://cwesd.onrender.com/api',
+  timeout: 300000,
+  prepareHeaders: (headers: any, { getState }: { getState: any }) => {
+    const token = getState()?.user?.accessToken;
+    
+    if (token) {
+      // Moodle APIs typically use different authentication
+      headers.set('Authorization', `Bearer ${token}`);
+      headers.set('moodlewsrestformat', 'json');
+    }
+    
+    return headers;
+  },
+});
+
 export const moodleApi = createApi({
   reducerPath: 'moodleApi',
-  baseQuery: baseQueryWithReauth,
+  baseQuery: moodleBaseQuery,
   tagTypes: ['Moodle'],
   endpoints: build => ({
     getCourseSections: build.query<MoodleCourseSectionsApiResponse, string>({
@@ -44,6 +61,27 @@ export const moodleApi = createApi({
       query: ({ moodleId, sectionNumber, instance }) => ({
         url: API_ENDPOINTS.MOODLE.ASSIGNMENT_SUBMISSIONS(moodleId, sectionNumber, instance),
       }),
+    }),
+    getAssignments: build.query<
+      any,
+      { courseId: string; sectionNumber: string; courseIds?: string; includenotenrolled?: boolean }
+    >({
+      query: ({ courseId, sectionNumber, courseIds, includenotenrolled }) => {
+        let url = API_ENDPOINTS.MOODLE.GET_ASSIGNMENTS(courseId, sectionNumber);
+        const params = new URLSearchParams();
+        
+        if (courseIds) params.append('courseIds', courseIds);
+        if (includenotenrolled !== undefined) params.append('includenotenrolled', includenotenrolled.toString());
+        
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
+        
+        return { url };
+      },
+      providesTags: (_result, _error, { courseId, sectionNumber }) => [
+        { type: 'Moodle', id: `${courseId}-${sectionNumber}-assignments` }
+      ],
     }),
     draftAssignment: build.mutation<
       { success?: boolean; message?: string; data?: unknown },
@@ -92,6 +130,8 @@ export const {
   useLazyGetMySubmissionQuery,
   useGetSubmissionsQuery,
   useLazyGetSubmissionsQuery,
+  useGetAssignmentsQuery,
+  useLazyGetAssignmentsQuery,
   useDraftAssignmentMutation,
   useSubmitAssignmentMutation,
 } = moodleApi;

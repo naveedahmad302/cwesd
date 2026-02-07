@@ -10,11 +10,13 @@ import {
   Calendar as CalendarIcon,
   User,
   PanelLeft,
+  BookOpen,
 } from 'lucide-react-native';
 
 // Teacher Screens
 import { TeacherDashboardScreen } from '../../screens/teacher';
 import { TeacherStudentsScreen } from '../../screens/teacher';
+import { TeacherCoursesScreen } from '../../screens/teacher';
 import { TeacherCalendarScreen } from '../../screens/teacher';
 import { TeacherGradesScreen } from '../../screens/teacher';
 import { TeacherQuizzesScreen } from '../../screens/teacher';
@@ -94,6 +96,14 @@ const TeacherDrawerNavigator = () => {
         options={{
           drawerLabel: 'Dashboard',
           drawerIcon: ({ color, size }) => <House color={color} size={size} />,
+        }}
+      />
+      <Drawer.Screen
+        name="Courses"
+        component={TeacherCoursesScreen}
+        options={{
+          drawerLabel: 'Courses',
+          drawerIcon: ({ color, size }) => <BookOpen color={color} size={size} />,
         }}
       />
       <Drawer.Screen

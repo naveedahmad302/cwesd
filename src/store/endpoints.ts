@@ -38,6 +38,8 @@ export const API_ENDPOINTS = {
       `/moodle/courses/${moodleId}/sections/${sectionNumber}/assignments/${instance}/draft`,
     ASSIGNMENT_SUBMIT: (moodleId: string, sectionNumber: string, instance: string) =>
       `/moodle/courses/${moodleId}/sections/${sectionNumber}/assignments/${instance}/submit`,
+    GET_ASSIGNMENTS: (courseId: string, sectionNumber: string) => 
+      `/moodle/courses/${courseId}/sections/${sectionNumber}/get-assignments`,
   },
 
   MESSAGES: {
