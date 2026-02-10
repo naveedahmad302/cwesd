@@ -10,3 +10,4 @@ export * from './quizzesApi';
 export * from './teacherApi';
 export * from './moodleApi';
 export * from './messagesApi';
+export * from './webinarsApi';

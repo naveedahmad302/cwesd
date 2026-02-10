@@ -20,6 +20,7 @@ import {
   teacherApi,
   moodleApi,
   messagesApi,
+  webinarsApi,
 } from './api';
 
 // Configure the store
@@ -56,6 +57,7 @@ export const store = configureStore({
       teacherApi.middleware,
       moodleApi.middleware,
       messagesApi.middleware,
+      webinarsApi.middleware,
     ),
 });
 

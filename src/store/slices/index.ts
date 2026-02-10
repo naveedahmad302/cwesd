@@ -14,6 +14,7 @@ import {
   teacherApi,
   moodleApi,
   messagesApi,
+  webinarsApi,
 } from '../api';
 
 export interface PersistConfigI<T = undefined> {
@@ -44,6 +45,7 @@ const rootReducer = combineReducers({
   [teacherApi.reducerPath]: teacherApi.reducer,
   [moodleApi.reducerPath]: moodleApi.reducer,
   [messagesApi.reducerPath]: messagesApi.reducer,
+  [webinarsApi.reducerPath]: webinarsApi.reducer,
 });
 
 export default rootReducer;

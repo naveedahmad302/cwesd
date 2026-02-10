@@ -1,8 +1,8 @@
 import React from 'react';
 import SharedCalendarScreen from '../../shared/components/SharedCalendarScreen';
 
-const TeacherCalendarScreen = () => {
+const TeacherCalendarScreenNew = () => {
   return <SharedCalendarScreen userRole="teacher" />;
 };
 
-export default TeacherCalendarScreen;
+export default TeacherCalendarScreenNew;

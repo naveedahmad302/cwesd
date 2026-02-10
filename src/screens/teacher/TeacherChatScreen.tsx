@@ -1,5 +1,28 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Image, ListRenderItem, ActivityIndicator, Modal, ScrollView, BackHandler, Pressable, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  ListRenderItem,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  BackHandler,
+  Pressable,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
+  Text,
+  Alert,
+  Dimensions,
+} from 'react-native';
+import { GiftedChat, IMessage, User } from 'react-native-gifted-chat';
+import { Swipeable } from 'react-native-gesture-handler';
+import { Check, CheckCheck } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import StyledText from '../../shared/components/StyledText';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useGetStudentsQuery, useGetAdminsQuery, useLazyGetChatQuery } from '../../store/api';
@@ -10,6 +33,125 @@ import { useNavigation } from '@react-navigation/native';
 import { Send, MessageCircle } from 'lucide-react-native';
 import { useAppSelector } from '../../store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Message as ApiMessage } from '../../types/messages.types';
+import { showErrorToast } from '../../utils';
+
+/** IMessage with optional read and reply from our API */
+export type ChatMessage = IMessage & {
+  read?: boolean;
+  repliedTo?: { _id: string; text: string } | null;
+};
+
+const RECENT_CHATS_STORAGE_KEY = 'persistentRecentChats_teacher';
+const RECENT_CHATS_LIMIT = 10;
+
+function ScrollToBottomIcon() {
+  return <Icon name="chevron-double-down" size={24} color="#666" />;
+}
+
+export const formatChatMessageTime = (timestamp: number | Date): string => {
+  if (timestamp instanceof Date) {
+    timestamp = timestamp.getTime();
+  }
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
+/** Placeholder skeleton when loading messages */
+function ChatMessageSkeleton() {
+  return (
+    <View style={skeletonStyles.container}>
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => (
+        <View
+          key={i}
+          style={[
+            skeletonStyles.bubble,
+            i % 2 === 0
+              ? skeletonStyles.bubbleRight
+              : skeletonStyles.bubbleLeft,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const skeletonStyles = StyleSheet.create({
+  container: { flex: 1, padding: 16, gap: 16 },
+  bubble: {
+    width: '70%',
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#E5E7EB',
+  },
+  bubbleLeft: { alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
+  bubbleRight: { alignSelf: 'flex-end', borderBottomRightRadius: 4 },
+});
+
+// ---------------------------------------------------------------------------
+// Helpers: API message → Gifted Chat IMessage
+// ---------------------------------------------------------------------------
+
+function getMessageSenderId(msg: ApiMessage): string {
+  const raw = msg.senderId;
+  return typeof raw === 'string' ? raw : (raw as { _id: string })._id;
+}
+
+function getMessageReceiverId(msg: ApiMessage): string {
+  const raw = msg.receiverId;
+  return typeof raw === 'string' ? raw : (raw as { _id: string })._id;
+}
+
+function apiMessageToGifted(
+  msg: ApiMessage,
+  currentUserId: string,
+  otherUserId: string,
+  myUser: User,
+  otherUser: User,
+  context?: { messageIndex?: number; lastMessageSender?: 'me' | 'user' },
+): ChatMessage {
+  const actualSenderId = getMessageSenderId(msg);
+  const actualReceiverId = getMessageReceiverId(msg);
+
+  let isFromMe = actualSenderId === currentUserId;
+
+  // Backend bug: senderId === receiverId; use context to infer sender
+  if (actualSenderId === currentUserId && actualReceiverId === currentUserId) {
+    if (context?.messageIndex !== undefined) {
+      isFromMe = context.messageIndex % 2 === 0;
+    } else if (context?.lastMessageSender !== undefined) {
+      isFromMe = context.lastMessageSender === 'user';
+    }
+  } else if (actualSenderId === otherUserId) {
+    isFromMe = false;
+  }
+
+  const createdAt = msg.createdAt ? new Date(msg.createdAt) : new Date();
+
+  const gifted: ChatMessage = {
+    _id: msg._id,
+    text: msg.text,
+    createdAt,
+    user: isFromMe ? myUser : otherUser,
+    sent: true,
+    received: true,
+  };
+  if (typeof msg.read === 'boolean') {
+    gifted.read = msg.read;
+  }
+  if (
+    msg.repliedTo &&
+    typeof msg.repliedTo === 'object' &&
+    msg.repliedTo.text
+  ) {
+    gifted.repliedTo = { _id: msg.repliedTo._id, text: msg.repliedTo.text };
+  }
+  return gifted;
+}
 
 // Type definitions
 interface User {
@@ -41,6 +183,7 @@ interface Message {
 const TeacherChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const user = useAppSelector(state => state.user.user);
   const recentChatUsers = useAppSelector(state => state.user.recentChatUsers);
   const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useGetStudentsQuery();
@@ -64,15 +207,53 @@ const TeacherChatScreen = () => {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [lastMessages, setLastMessages] = useState<{ [userId: string]: { time: string; text: string } }>({});
   const [persistentRecentChats, setPersistentRecentChats] = useState<string[]>([]); // For permanent storage
+  
+  // New state for advanced chat features
+  const [giftedMessages, setGiftedMessages] = useState<ChatMessage[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [messageOptionsMessage, setMessageOptionsMessage] = useState<ChatMessage | null>(null);
+  const [selectedUserForMenu, setSelectedUserForMenu] = useState<User | null>(null);
+  const [showUserOptionsMenu, setShowUserOptionsMenu] = useState(false);
+  
+  // Refs for message handling
+  const giftedMessagesRef = useRef<ChatMessage[]>([]);
+  giftedMessagesRef.current = giftedMessages;
+  const editingMessageIdRef = useRef<string | null>(null);
+  editingMessageIdRef.current = editingMessage
+    ? String(editingMessage._id)
+    : null;
 
   // Get user ID at component level
   const userId = user?.id || (user as any)?._id;
+
+  // Gifted Chat user objects (stable refs for current user and selected user)
+  const giftedUser: User = useMemo(
+    () => ({
+      _id: userId,
+      name: user?.name ?? '',
+      avatar: user?.picture ?? undefined,
+    }),
+    [userId, user?.name, user?.picture],
+  );
+
+  const giftedOtherUser: User | null = useMemo(() => {
+    if (!selectedUser) return null;
+    return {
+      _id: selectedUser._id,
+      name: selectedUser.name,
+      avatar: selectedUser.picture,
+    };
+  }, [selectedUser]);
 
   // Load persistent recent chats from AsyncStorage on mount
   useEffect(() => {
     const loadPersistentRecentChats = async () => {
       try {
-        const stored = await AsyncStorage.getItem('persistentRecentChats_teacher');
+        const stored = await AsyncStorage.getItem(RECENT_CHATS_STORAGE_KEY);
         if (stored) {
           setPersistentRecentChats(JSON.parse(stored));
         }
@@ -84,15 +265,20 @@ const TeacherChatScreen = () => {
   }, []);
 
   // Save recent chat to AsyncStorage when message is sent
-  const saveRecentChatToStorage = async (userId: string) => {
+  const saveRecentChatToStorage = useCallback(async (userId: string) => {
     try {
-      const updated = [userId, ...persistentRecentChats.filter(id => id !== userId)].slice(0, 10);
-      setPersistentRecentChats(updated);
-      await AsyncStorage.setItem('persistentRecentChats_teacher', JSON.stringify(updated));
+      setPersistentRecentChats(prev => {
+        const updated = [
+          userId,
+          ...prev.filter(id => id !== userId),
+        ].slice(0, RECENT_CHATS_LIMIT);
+        AsyncStorage.setItem(RECENT_CHATS_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
     } catch (error) {
       // Handle error silently
     }
-  };
+  }, []);
 
   // Function to get recent chat users and add them to the top (using persistent storage)
   const getRecentChatUsers = useCallback(() => {
@@ -102,22 +288,31 @@ const TeacherChatScreen = () => {
     
     return persistentRecentChats.map(userId => {
       const user = allUsers.find(u => u._id === userId);
-      return user ? { ...user, isRecentChat: true } : null;
+      // Only include user if they exist AND have messages
+      return (user && lastMessages[userId]) ? { ...user, isRecentChat: true } : null;
     }).filter(Boolean);
-  }, [persistentRecentChats, allUsers]);
+  }, [persistentRecentChats, allUsers, lastMessages]);
 
-  // Function to get non-recent users
+  // Function to get non-recent users (only users with conversations)
   const getNonRecentUsers = useCallback(() => {
     const recentUserIds = persistentRecentChats || [];
-    return users.filter(user => !recentUserIds.includes(user._id));
-  }, [users, persistentRecentChats]);
+    return users.filter(user => 
+      !recentUserIds.includes(user._id) && 
+      lastMessages[user._id] // Only show users who have messages
+    );
+  }, [users, persistentRecentChats, lastMessages]);
 
   // Combine recent and non-recent users (filter nulls for FlatList)
   const sortedUsers = useMemo((): User[] => {
     const recent = getRecentChatUsers().filter((u): u is User & { isRecentChat: true } => u != null);
     const nonRecent = getNonRecentUsers();
-    return [...recent, ...nonRecent];
-  }, [getRecentChatUsers, getNonRecentUsers]);
+    const allSorted = [...recent, ...nonRecent];
+    console.log('Sorted users:', allSorted.length, 'users');
+    console.log('Recent users:', recent.length);
+    console.log('Non-recent users:', nonRecent.length);
+    console.log('LastMessages keys:', Object.keys(lastMessages));
+    return allSorted;
+  }, [getRecentChatUsers, getNonRecentUsers, lastMessages]);
 
   // Check if users are coming from route params
   useEffect(() => {
@@ -129,91 +324,135 @@ const TeacherChatScreen = () => {
     }
   }, [route.params]);
 
-  // Load chat history when user is selected and start real-time polling
+  // Load chat history and realtime when a user is selected
   useEffect(() => {
-    if (selectedUser && user) {
-      // Validate that we have valid IDs
-      const userId = user?.id || (user as any)?._id;
-      const selectedUserId = selectedUser?._id;
+    if (!selectedUser || !userId || !giftedOtherUser) return;
 
-      if (!userId || !selectedUserId) {
-        return;
-      }
+    const selectedUserId = selectedUser._id;
 
-      const loadChatHistory = async () => {
-        setIsLoadingMessages(true);
-        try {
-          const result = await getChat({ senderId: userId, receiverId: selectedUserId }).unwrap();
+    console.log('Setting up chat for user:', selectedUser.name);
+    console.log('Socket URL available:', !!'SOCKET_URL' in window || !!process.env.SOCKET_URL);
 
-          if (result?.data) {
-            const chatMessages = result.data.map((msg: any) => {
-              const actualSenderId = msg.senderId?._id ?? msg.senderId;
-              const actualReceiverId = msg.receiverId?._id ?? msg.receiverId;
+    const loadHistory = async () => {
+      setIsLoadingMessages(true);
+      try {
+        const result = await getChat({
+          senderId: userId,
+          receiverId: selectedUserId,
+        }).unwrap();
 
-              return {
-                id: msg._id,
-                text: msg.text,
-                sender: (actualSenderId === userId ? 'me' : 'user') as 'me' | 'user',
-                time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                read: msg.read,
-                edited: msg.edited,
-                repliedTo: msg.repliedTo
-              };
-            });
-            setMessages(chatMessages as Message[]);
-          } else {
-            setMessages([]);
-          }
-        } catch (error: any) {
-          if (error?.status === 500) {
-            setMessages([]);
-            setIsLoadingMessages(false);
-            return;
-          }
-          setMessages([]);
-        } finally {
-          setIsLoadingMessages(false);
+        const list = result?.data;
+        if (list?.length) {
+          const mapped: ChatMessage[] = list.map(
+            (msg: ApiMessage, idx: number) =>
+              apiMessageToGifted(
+                msg,
+                userId,
+                selectedUserId,
+                giftedUser,
+                giftedOtherUser,
+                {
+                  messageIndex: idx,
+                },
+              ),
+          );
+          mapped.sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          setGiftedMessages(mapped);
+          console.log('Loaded', mapped.length, 'messages for', selectedUser.name);
+        } else {
+          setGiftedMessages([]);
+          console.log('No messages found for', selectedUser.name);
         }
-      };
-
-      loadChatHistory();
-
-      // Start real-time polling only if we have valid IDs
-      if (userId && selectedUserId) {
-        realtimeService.startPolling(userId, selectedUserId);
-
-        const handleNewMessage = (msg: any) => {
-          const actualSenderId = msg.senderId._id;
-          const actualReceiverId = msg.receiverId._id;
-
-          const formattedMessage: Message = {
-            id: msg._id,
-            text: msg.text,
-            sender: actualSenderId === userId ? 'me' : 'user',
-            time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            read: msg.read,
-            edited: msg.edited,
-            repliedTo: msg.repliedTo
-          };
-
-          setMessages(prev => {
-            const exists = prev.some(m => m.id === formattedMessage.id);
-            if (!exists) {
-              return [...prev, formattedMessage];
-            }
-            return prev;
-          });
-        };
-
-        realtimeService.on('newMessage', handleNewMessage);
-
-        return () => {
-          realtimeService.off('newMessage', handleNewMessage);
-          realtimeService.stopPolling(`${userId}-${selectedUserId}`);
-        };
+      } catch {
+        setGiftedMessages([]);
+      } finally {
+        setIsLoadingMessages(false);
       }
+    };
+
+    loadHistory();
+
+    realtimeService.startPolling(userId, selectedUserId, 3000);
+
+    const handleNewMessage = (msg: ApiMessage) => {
+      const current = giftedMessagesRef.current;
+      const lastSender: 'me' | 'user' | undefined =
+        current.length > 0
+          ? current[0].user._id === userId
+            ? 'me'
+            : 'user'
+          : undefined;
+
+      const gifted = apiMessageToGifted(
+        msg,
+        userId,
+        selectedUserId,
+        giftedUser,
+        giftedOtherUser,
+        { lastMessageSender: lastSender },
+      );
+
+      setGiftedMessages(prev => {
+        const exists = prev.some(m => String(m._id) === String(gifted._id));
+        if (exists) {
+          return prev.map(m =>
+            String(m._id) === String(gifted._id) ? gifted : m,
+          );
+        }
+        return [gifted, ...prev];
+      });
+    };
+
+    const handleMessageEdited = (msg: ApiMessage) => {
+      const gifted = apiMessageToGifted(
+        msg,
+        userId,
+        selectedUserId,
+        giftedUser,
+        giftedOtherUser,
+        {},
+      );
+      setGiftedMessages(prev =>
+        prev.map(m => (String(m._id) === String(gifted._id) ? gifted : m)),
+      );
+      if (
+        editingMessageIdRef.current &&
+        String(msg._id) === editingMessageIdRef.current
+      ) {
+        setEditingMessage(null);
+        setEditDraft('');
+      }
+    };
+
+    const handleMessageDeleted = (messageId: string) => {
+      setGiftedMessages(prev =>
+        prev.filter(m => String(m._id) !== String(messageId)),
+      );
+    };
+
+    realtimeService.on('newMessage', handleNewMessage);
+    realtimeService.on('messageEdited', handleMessageEdited);
+    realtimeService.on('messageDeleted', handleMessageDeleted);
+
+    return () => {
+      realtimeService.off('newMessage', handleNewMessage);
+      realtimeService.off('messageEdited', handleMessageEdited);
+      realtimeService.off('messageDeleted', handleMessageDeleted);
+      realtimeService.stopPolling(`${userId}-${selectedUserId}`);
+    };
+  }, [selectedUser, userId, giftedUser, giftedOtherUser, getChat]);
+
+  // Clear reply and edit when leaving chat
+  useEffect(() => {
+    if (!selectedUser) {
+      setReplyingTo(null);
+      setEditingMessage(null);
+      setEditDraft('');
     }
-  }, [selectedUser, user]);
+  }, [selectedUser]);
 
   // Handle hardware back button
   useEffect(() => {
@@ -243,10 +482,10 @@ const TeacherChatScreen = () => {
 
   // Fetch last messages when users are loaded
   useEffect(() => {
-    if (users.length > 0 && Object.keys(lastMessages).length === 0) {
+    if (users.length > 0 && userId) {
       fetchLastMessagesForUsers(users);
     }
-  }, [users]);
+  }, [users, userId]);
 
   const students = useMemo(() => {
     const data = (studentsData as any)?.data ?? studentsData?.data ?? [];
@@ -292,9 +531,11 @@ const TeacherChatScreen = () => {
   // Function to fetch last messages for all users
   const fetchLastMessagesForUsers = async (usersList: User[]) => {
     if (!userId) {
+      console.log('No userId available for fetching messages');
       return;
     }
 
+    console.log('Fetching last messages for', usersList.length, 'users');
     const lastMessagesData: { [userId: string]: { time: string; text: string } } = {};
 
     for (const userItem of usersList) {
@@ -309,47 +550,189 @@ const TeacherChatScreen = () => {
               time: new Date(lastMessage.createdAt ?? Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               text: lastMessage.text
             };
+          console.log('Found messages for user', userItem.name, ':', lastMessage.text);
+        } else {
+          console.log('No messages found for user', userItem.name);
         }
-      } catch {
-        // Don't add anything for errors
+      } catch (error) {
+        console.log('Error fetching messages for user', userItem.name, ':', error);
       }
     }
 
+    console.log('Setting lastMessages with', Object.keys(lastMessagesData).length, 'entries');
     setLastMessages(lastMessagesData);
   };
 
-  const handleSend = useCallback(async () => {
-    if (message.trim() === '' || !selectedUser || !user) return;
+  const onSend = useCallback(
+    async (newMessages: IMessage[] = []) => {
+      const text = newMessages[0]?.text?.trim();
+      if (!text || !selectedUser || !userId) return;
 
-    const userId = user?.id || (user as any)?._id;
-    const selectedUserId = selectedUser?._id;
+      const selectedUserId = selectedUser._id;
+      const replyToId = replyingTo?._id ? String(replyingTo._id) : undefined;
+      setIsSending(true);
+      try {
+        await realtimeService.sendMessage(userId, selectedUserId, text, replyToId);
+        setReplyingTo(null);
+        saveRecentChatToStorage(selectedUserId);
+        const now = new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        setLastMessages(prev => ({
+          ...prev,
+          [selectedUserId]: {
+            time: now,
+            text: text.length > 30 ? `${text.slice(0, 30)}...` : text,
+          },
+        }));
+      } catch {
+        // Error handled by realtime/API; optionally show toast
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [selectedUser, userId, saveRecentChatToStorage, replyingTo],
+  );
 
-    if (!userId || !selectedUserId) {
+  const handleDeleteMessage = useCallback(
+    (message: ChatMessage) => {
+      if (!selectedUser || !userId) return;
+      Alert.alert(
+        'Delete message',
+        'Are you sure you want to delete this message?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await realtimeService.deleteMessage(
+                  String(message._id),
+                  userId,
+                  selectedUser._id,
+                );
+              } catch {
+                // optionally show toast
+              }
+            },
+          },
+        ],
+      );
+    },
+    [selectedUser, userId],
+  );
+
+  const openMessageOptions = useCallback((message: ChatMessage) => {
+    setMessageOptionsMessage(message);
+  }, []);
+
+  const closeMessageOptions = useCallback(() => {
+    setMessageOptionsMessage(null);
+  }, []);
+
+  const handleMessageOptionReply = useCallback(() => {
+    if (messageOptionsMessage) setReplyingTo(messageOptionsMessage);
+    closeMessageOptions();
+  }, [messageOptionsMessage, closeMessageOptions]);
+
+  const handleMessageOptionEdit = useCallback(() => {
+    if (messageOptionsMessage) {
+      setEditingMessage(messageOptionsMessage);
+      setEditDraft(messageOptionsMessage.text ?? '');
+    }
+    closeMessageOptions();
+  }, [messageOptionsMessage, closeMessageOptions]);
+
+  const handleMessageOptionDelete = useCallback(() => {
+    if (messageOptionsMessage) handleDeleteMessage(messageOptionsMessage);
+    closeMessageOptions();
+  }, [messageOptionsMessage, handleDeleteMessage, closeMessageOptions]);
+
+  const handleSaveEdit = useCallback(async () => {
+    const text = editDraft.trim();
+    if (!editingMessage || !userId || !selectedUser || !text) {
+      setEditingMessage(null);
+      setEditDraft('');
+      setIsEditing(false);
       return;
     }
 
+    setIsEditing(true);
     try {
-      await realtimeService.sendMessage(
+      const result = await realtimeService.editMessage(
+        String(editingMessage._id),
         userId,
-        selectedUserId,
-        message.trim()
+        selectedUser._id,
+        text,
       );
-      
-      // Only add to recent chat when message is successfully sent
-      saveRecentChatToStorage(selectedUserId);
-      setMessage('');
-    } catch (error: any) {
-      // Don't add to recent chat if message fails
-      const fallbackMessage: Message = {
-        id: Date.now().toString(),
-        text: message.trim(),
-        sender: 'me',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, fallbackMessage]);
-      setMessage('');
+      if (result?.data) {
+        realtimeService.notifyMessageEdited(result.data);
+      }
+      setEditingMessage(null);
+      setEditDraft('');
+    } catch {
+      showErrorToast('Failed to edit message');
+    } finally {
+      setIsEditing(false);
     }
-  }, [message, selectedUser, user, saveRecentChatToStorage]); // Add saveRecentChatToStorage to dependency array
+  }, [editingMessage, editDraft, userId, selectedUser]);
+
+  // User menu functions
+  const openUserMenu = useCallback((user: User) => {
+    setSelectedUserForMenu(user);
+    setShowUserOptionsMenu(true);
+  }, []);
+
+  const closeUserMenu = useCallback(() => {
+    setSelectedUserForMenu(null);
+    setShowUserOptionsMenu(false);
+  }, []);
+
+  const handleDeleteConversation = useCallback(() => {
+    if (!selectedUserForMenu) return;
+    Alert.alert(
+      'Delete Conversation',
+      'Are you sure you want to delete all messages with this user?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            // TODO: Implement delete conversation logic
+            closeUserMenu();
+          },
+        },
+      ],
+    );
+  }, [selectedUserForMenu, closeUserMenu]);
+
+  const handleArchiveConversation = useCallback(() => {
+    if (!selectedUserForMenu) return;
+    // TODO: Implement archive conversation logic
+    closeUserMenu();
+  }, [selectedUserForMenu, closeUserMenu]);
+
+  const handleBlockUser = useCallback(() => {
+    if (!selectedUserForMenu) return;
+    Alert.alert(
+      'Block User',
+      `Are you sure you want to block ${selectedUserForMenu.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: () => {
+            // TODO: Implement block user logic
+            closeUserMenu();
+          },
+        },
+      ],
+    );
+  }, [selectedUserForMenu, closeUserMenu]);
 
   // Search functionality
   const handleSearch = (query: string) => {
@@ -413,6 +796,15 @@ const TeacherChatScreen = () => {
             </StyledText>
           </View>
         </View>
+        <TouchableOpacity
+          style={styles.userMenuButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            openUserMenu(item);
+          }}
+        >
+          <Icon name="dots-vertical" size={20} color="#666" />
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -482,7 +874,7 @@ const TeacherChatScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: 0 + insets.top }]}>
       {!selectedUser ? (
         <View style={styles.teacherListContainer}>
           <View style={styles.header}>
@@ -516,7 +908,11 @@ const TeacherChatScreen = () => {
           )}
         </View>
       ) : (
-        <View style={styles.chatContainer}>
+        <KeyboardAvoidingView
+          style={styles.chatContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
           <View style={styles.chatHeader}>
             <Pressable
               onPress={() => {
@@ -525,59 +921,458 @@ const TeacherChatScreen = () => {
               }}
               style={({ pressed }) => [
                 styles.backButton,
-                { backgroundColor: pressed ? '#f0f0f0' : 'transparent' }
+                { backgroundColor: pressed ? '#f0f0f0' : 'transparent' },
               ]}
             >
               <Icon name="arrow-left" size={24} color="#333" />
             </Pressable>
-            <TouchableOpacity
+            <Pressable
               onPress={() => {
                 setSelectedUser(null);
                 navigation.setOptions({ headerShown: true });
               }}
               style={styles.teacherHeaderTouchable}
             >
-              <Image source={{ uri: selectedUser.picture }} style={styles.chatHeaderAvatar} />
+              <Image
+                source={{ uri: selectedUser.picture }}
+                style={styles.chatHeaderAvatar}
+              />
               <View>
-                <StyledText style={styles.chatHeaderName}>{selectedUser.name}</StyledText>
+                <StyledText style={styles.chatHeaderName}>
+                  {selectedUser.name}
+                </StyledText>
                 <View style={styles.statusContainer}>
-                  <View style={[styles.statusDot, { backgroundColor: selectedUser.isOnline ? '#4CAF50' : '#9E9E9E' }]} />
+                  <View
+                    style={[
+                      styles.statusDot,
+                      selectedUser.isOnline
+                        ? styles.statusDotOnline
+                        : styles.statusDotOffline,
+                    ]}
+                  />
                   <StyledText style={styles.statusText}>
                     {selectedUser.isOnline ? 'Online' : 'Offline'}
                   </StyledText>
                 </View>
               </View>
-            </TouchableOpacity>
+            </Pressable>
           </View>
 
-          <FlatList
-            data={messages}
-            keyExtractor={item => item.id}
-            renderItem={renderMessage}
-            contentContainerStyle={styles.messagesList}
-            inverted={false}
-            ListHeaderComponent={isLoadingMessages ? (
-              <View style={styles.loadingMessagesContainer}>
-                <ActivityIndicator size="small" color="#E56B8C" />
-                <StyledText style={styles.loadingMessagesText}>Loading messages...</StyledText>
-              </View>
-            ) : null}
-          />
+          {isLoadingMessages && giftedMessages.length === 0 ? (
+            <ChatMessageSkeleton />
+          ) : (
+            <GiftedChat
+              messages={giftedMessages}
+              onSend={onSend}
+              user={giftedUser}
+              placeholder="Type a message..."
+              alwaysShowSend
+              scrollToBottomComponent={ScrollToBottomIcon}
+              disableComposer={isSending}
+              maxInputLength={500}
+              bottomOffset={insets.bottom + 8}
+              renderChatFooter={
+                replyingTo
+                  ? () => (
+                      <View style={styles.replyBar}>
+                        <View style={styles.replyBarLeft}>
+                          <Text style={styles.replyBarLabel} numberOfLines={1}>
+                            Replying to: {replyingTo.text}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => setReplyingTo(null)}
+                          style={styles.replyBarClose}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        >
+                          <Icon name="close" size={20} color="#666" />
+                        </TouchableOpacity>
+                      </View>
+                    )
+                  : undefined
+              }
+              listViewProps={
+                {
+                  keyboardDismissMode: 'on-drag',
+                  keyboardShouldPersistTaps: 'handled',
+                  initialNumToRender: 20,
+                  maxToRenderPerBatch: 10,
+                  windowSize: 10,
+                  removeClippedSubviews: true,
+                } as React.ComponentProps<typeof GiftedChat>['listViewProps']
+              }
+              renderBubble={props => {
+                const msg = props.currentMessage as ChatMessage | undefined;
+                const isMe = msg?.user._id === userId;
+                const read = msg && isMe && msg.read;
+                const text = msg?.text ?? '';
+                const reply = msg?.repliedTo;
+                const bubbleMaxWidth = Dimensions.get('window').width * 0.8;
+                const replyAction = () => (
+                  <View style={styles.swipeReplyAction}>
+                    <Icon name="reply" size={16} color="#fff" />
+                    <Text style={styles.swipeReplyText}>Reply</Text>
+                  </View>
+                );
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={message}
-              onChangeText={setMessage}
-              placeholder="Type a message ..."
-              placeholderTextColor="black"
-              multiline
+                const bubbleContent = (
+                  <View
+                    style={[
+                      styles.bubble,
+                      { maxWidth: bubbleMaxWidth },
+                      isMe ? styles.bubbleMe : styles.bubbleOther,
+                      styles.bubbleContentNoStretch,
+                    ]}
+                  >
+                    <TouchableOpacity
+                      onPress={() => msg && openMessageOptions(msg)}
+                      style={[
+                        styles.bubbleDotsInside,
+                        isMe
+                          ? styles.bubbleDotsInsideMe
+                          : styles.bubbleDotsInsideOther,
+                      ]}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <Icon
+                        name="dots-vertical"
+                        size={20}
+                        color={isMe ? 'rgba(255,255,255,0.9)' : '#666'}
+                      />
+                    </TouchableOpacity>
+                    {reply?.text ? (
+                      <View
+                        style={[
+                          styles.replyPreview,
+                          isMe ? styles.replyPreviewMe : styles.replyPreviewOther,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.replyPreviewLabel,
+                            isMe
+                              ? styles.replyPreviewLabelMe
+                              : styles.replyPreviewLabelOther,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          Reply to: {reply.text}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.bubbleText,
+                        isMe ? styles.bubbleTextMe : styles.bubbleTextOther,
+                      ]}
+                      selectable
+                    >
+                      {text}
+                    </Text>
+                    <View
+                      style={[
+                        styles.bubbleFooterRow,
+                        isMe
+                          ? styles.bubbleFooterRowMe
+                          : styles.bubbleFooterRowOther,
+                      ]}
+                    >
+                      {isMe && (
+                        <View style={styles.messageStatusIconWrap}>
+                          {read ? (
+                            <CheckCheck size={14} color="rgba(255,255,255,0.85)" />
+                          ) : (
+                            <Check size={14} color="rgba(255,255,255,0.85)" />
+                          )}
+                        </View>
+                      )}
+                      {msg?.createdAt && (
+                        <Text
+                          style={[
+                            styles.bubbleTimeText,
+                            isMe
+                              ? styles.bubbleTimeTextMe
+                              : styles.bubbleTimeTextOther,
+                          ]}
+                        >
+                          {formatChatMessageTime(msg.createdAt)}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                );
+
+                return (
+                  <Swipeable
+                    renderRightActions={replyAction}
+                    renderLeftActions={replyAction}
+                    onSwipeableOpen={(_direction, swipeable) => {
+                      if (msg) setReplyingTo(msg);
+                      swipeable.close();
+                    }}
+                    containerStyle={[
+                      styles.bubbleWrapper,
+                      isMe ? styles.bubbleWrapperMe : styles.bubbleWrapperOther,
+                    ]}
+                    friction={2}
+                  >
+                    {bubbleContent}
+                  </Swipeable>
+                );
+              }}
+              timeFormat="HH:mm"
+              dateFormat="MMM d, yyyy"
+              showUserAvatar
+              renderAvatar={(props: { currentMessage?: IMessage }) => (
+                <Image
+                  source={{
+                    uri:
+                      typeof props.currentMessage?.user.avatar === 'string'
+                        ? props.currentMessage.user.avatar
+                        : undefined,
+                  }}
+                  style={styles.avatar}
+                />
+              )}
+              minInputToolbarHeight={44}
+              maxComposerHeight={120}
+              renderInputToolbar={(props) => (
+                <View style={styles.customInputToolbar}>
+                  <TextInput
+                    style={styles.customTextInput}
+                    value={props.text}
+                    onChangeText={props.onTextChanged}
+                    placeholder="Type a message..."
+                    placeholderTextColor="black"
+                    multiline
+                    maxLength={500}
+                    textAlignVertical="center"
+                    editable={!isSending}
+                  />
+                  {props.text && props.text.trim() !== '' && (
+                    <TouchableOpacity
+                      style={styles.customSendButton}
+                      onPress={() => {
+                        if (props.text && props.text.trim()) {
+                          props.onSend({ text: props.text.trim() }, true);
+                        }
+                      }}
+                      disabled={isSending}
+                    >
+                      <Send size={20} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              renderSend={undefined}
             />
-            <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-              <Send size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
+          )}
+
+          {/* Message options popover (dropdown) */}
+          <Modal
+            visible={!!messageOptionsMessage}
+            transparent
+            animationType="fade"
+            onRequestClose={closeMessageOptions}
+          >
+            <Pressable
+              style={styles.optionsPopoverOverlay}
+              onPress={closeMessageOptions}
+            >
+              <Pressable
+                style={styles.optionsPopoverCard}
+                onPress={e => e.stopPropagation()}
+              >
+                {messageOptionsMessage && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.optionsPopoverRow}
+                      onPress={handleMessageOptionReply}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="reply-outline" size={20} color="#333" />
+                      <Text style={styles.optionsPopoverRowText}>Reply</Text>
+                    </TouchableOpacity>
+                    {messageOptionsMessage.user._id === userId && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.optionsPopoverRow}
+                          onPress={handleMessageOptionEdit}
+                          activeOpacity={0.7}
+                        >
+                          <Icon name="pencil-outline" size={20} color="#333" />
+                          <Text style={styles.optionsPopoverRowText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.optionsPopoverRow,
+                            styles.optionsPopoverRowDestructive,
+                          ]}
+                          onPress={handleMessageOptionDelete}
+                          activeOpacity={0.7}
+                        >
+                          <Icon name="delete-outline" size={20} color="#D32F2F" />
+                          <Text
+                            style={[
+                              styles.optionsPopoverRowText,
+                              styles.optionsPopoverRowTextDestructive,
+                            ]}
+                          >
+                            Delete
+                          </Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    <View style={styles.optionsPopoverDivider} />
+                    <TouchableOpacity
+                      style={styles.optionsPopoverRow}
+                      onPress={closeMessageOptions}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.optionsPopoverRowTextCancel}>Cancel</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </Pressable>
+            </Pressable>
+          </Modal>
+
+          {/* Edit message modal */}
+          <Modal
+            visible={!!editingMessage}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+              setEditingMessage(null);
+              setEditDraft('');
+            }}
+          >
+            <Pressable
+              style={styles.editModalOverlay}
+              onPress={() => {
+                setEditingMessage(null);
+                setEditDraft('');
+              }}
+            >
+              <Pressable
+                style={styles.editModalContent}
+                onPress={e => e.stopPropagation()}
+              >
+                <StyledText style={styles.editModalTitle}>Edit message</StyledText>
+                <TextInput
+                  style={styles.editModalInput}
+                  value={editDraft}
+                  onChangeText={setEditDraft}
+                  placeholder="Message..."
+                  placeholderTextColor="#999"
+                  multiline
+                  maxLength={500}
+                />
+                <View style={styles.editModalActions}>
+                  <TouchableOpacity
+                    style={[styles.editModalButton, styles.editModalButtonCancel]}
+                    onPress={() => {
+                      setEditingMessage(null);
+                      setEditDraft('');
+                    }}
+                  >
+                    <StyledText style={styles.editModalButtonCancelText}>
+                      Cancel
+                    </StyledText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.editModalButton,
+                      styles.editModalButtonSave,
+                      isEditing && styles.editModalButtonSaveDisabled,
+                    ]}
+                    onPress={handleSaveEdit}
+                    disabled={isEditing}
+                  >
+                    <StyledText style={styles.editModalButtonSaveText}>
+                      {isEditing ? 'Saving...' : 'Save'}
+                    </StyledText>
+                  </TouchableOpacity>
+                </View>
+              </Pressable>
+            </Pressable>
+          </Modal>
+
+          {/* User Options Modal */}
+          <Modal
+            visible={showUserOptionsMenu}
+            transparent
+            animationType="fade"
+            onRequestClose={closeUserMenu}
+          >
+            <Pressable
+              style={styles.optionsPopoverOverlay}
+              onPress={closeUserMenu}
+            >
+              <Pressable
+                style={styles.optionsPopoverCard}
+                onPress={e => e.stopPropagation()}
+              >
+                {selectedUserForMenu && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.optionsPopoverRow}
+                      onPress={handleArchiveConversation}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="archive-outline" size={20} color="#333" />
+                      <Text style={styles.optionsPopoverRowText}>Archive Conversation</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.optionsPopoverRow,
+                        styles.optionsPopoverRowDestructive,
+                      ]}
+                      onPress={handleDeleteConversation}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="delete-outline" size={20} color="#D32F2F" />
+                      <Text
+                        style={[
+                          styles.optionsPopoverRowText,
+                          styles.optionsPopoverRowTextDestructive,
+                        ]}
+                      >
+                        Delete Conversation
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.optionsPopoverRow,
+                        styles.optionsPopoverRowDestructive,
+                      ]}
+                      onPress={handleBlockUser}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="block-helper" size={20} color="#D32F2F" />
+                      <Text
+                        style={[
+                          styles.optionsPopoverRowText,
+                          styles.optionsPopoverRowTextDestructive,
+                        ]}
+                      >
+                        Block User
+                      </Text>
+                    </TouchableOpacity>
+                    <View style={styles.optionsPopoverDivider} />
+                    <TouchableOpacity
+                      style={styles.optionsPopoverRow}
+                      onPress={closeUserMenu}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.optionsPopoverRowTextCancel}>Cancel</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </Pressable>
+            </Pressable>
+          </Modal>
+        </KeyboardAvoidingView>
       )}
 
       {/* Search Modal */}
@@ -591,7 +1386,7 @@ const TeacherChatScreen = () => {
           setSearchResults([]);
         }}
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, { paddingTop: insets.top }]}>
           <View style={styles.modalHeader}>
             <View style={styles.placeholder} />
             <StyledText style={styles.modalTitle}>Message Users</StyledText>
@@ -671,7 +1466,6 @@ const TeacherChatScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 25,
     backgroundColor: '#F9FAFB',
   },
   // User List Styles
@@ -697,10 +1491,16 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     marginBottom: 8,
     backgroundColor: '#f9f9f9',
+    justifyContent: 'space-between',
+  },
+  userMenuButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   recentChatItem: {
-    backgroundColor: '#e8f4fd',
-    borderColor: '#4A90E2',
+    // backgroundColor: '#e8f4fd',
+    // borderColor: '#4A90E2',
   },
   selectedTeacher: {
     backgroundColor: '#e3f2fd',
@@ -1061,6 +1861,299 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999',
     textAlign: 'center',
+  },
+  // New GiftedChat styles
+  replyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F0F4F8',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  replyBarLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  replyBarLabel: {
+    fontSize: 14,
+    color: '#475569',
+  },
+  replyBarClose: {
+    padding: 4,
+  },
+  optionsPopoverOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  optionsPopoverCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 6,
+    minWidth: 200,
+    maxWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  optionsPopoverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  optionsPopoverRowText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  optionsPopoverRowTextDestructive: {
+    color: '#D32F2F',
+  },
+  optionsPopoverRowTextCancel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  optionsPopoverRowDestructive: {},
+  optionsPopoverDivider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginVertical: 4,
+  },
+  editModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  editModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  editModalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    minHeight: 80,
+    maxHeight: 120,
+    textAlignVertical: 'top',
+  },
+  editModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 16,
+  },
+  editModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  editModalButtonCancel: {
+    backgroundColor: '#f0f0f0',
+  },
+  editModalButtonCancelText: {
+    color: '#666',
+    fontSize: 16,
+  },
+  editModalButtonSave: {
+    backgroundColor: '#E56B8C',
+  },
+  editModalButtonSaveDisabled: {
+    opacity: 0.6,
+  },
+  editModalButtonSaveText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Updated chat styles for GiftedChat
+  chatContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  statusDotOnline: {
+    backgroundColor: '#4CAF50',
+  },
+  statusDotOffline: {
+    backgroundColor: '#9E9E9E',
+  },
+  bubbleWrapper: {
+    width: '100%',
+    flexDirection: 'row',
+    marginVertical: 5,
+  },
+  bubbleWrapperMe: {
+    justifyContent: 'flex-end',
+    marginLeft: 'auto',
+  },
+  bubbleWrapperOther: {
+    justifyContent: 'flex-start',
+    marginRight: 'auto',
+  },
+  bubbleContentNoStretch: {
+    alignSelf: 'flex-start',
+  },
+  swipeReplyAction: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#25D366',
+    width: 72,
+    marginVertical: 4,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  swipeReplyText: {
+    color: '#fff',
+    fontSize: 10,
+    marginTop: 2,
+  },
+  bubbleDotsInside: {
+    position: 'absolute',
+    top: 4,
+    padding: 4,
+    zIndex: 1,
+  },
+  bubbleDotsInsideMe: {
+    right: 4,
+  },
+  bubbleDotsInsideOther: {
+    left: 4,
+  },
+  bubble: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+  },
+  bubbleMe: {
+    backgroundColor: '#E56B8C',
+    borderBottomRightRadius: 4,
+    paddingRight: 32,
+    justifyContent: 'flex-start',
+  },
+  bubbleOther: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f1f1f1',
+    borderBottomLeftRadius: 4,
+    paddingLeft: 32,
+  },
+  bubbleText: {
+    fontSize: 16,
+    lineHeight: 22,
+    minHeight: 22,
+  },
+  bubbleTextMe: {
+    color: '#fff',
+  },
+  bubbleTextOther: {
+    color: '#333',
+  },
+  replyPreview: {
+    borderLeftWidth: 3,
+    paddingLeft: 8,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  replyPreviewMe: {
+    borderLeftColor: 'rgba(255,255,255,0.7)',
+  },
+  replyPreviewOther: {
+    borderLeftColor: 'rgba(0,0,0,0.2)',
+  },
+  replyPreviewLabel: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  replyPreviewLabelMe: {
+    color: 'rgba(255,255,255,0.9)',
+  },
+  replyPreviewLabelOther: {
+    color: 'rgba(0,0,0,0.6)',
+  },
+  bubbleFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 5,
+  },
+  bubbleFooterRowMe: {
+    justifyContent: 'flex-end',
+  },
+  bubbleFooterRowOther: {
+    justifyContent: 'flex-start',
+  },
+  messageStatusIconWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bubbleTimeText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  bubbleTimeTextMe: {
+    color: 'rgba(255,255,255,0.75)',
+  },
+  bubbleTimeTextOther: {
+    color: '#8E8E93',
+  },
+  messageStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  customSendButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    marginRight: 8,
+    backgroundColor: '#E56B8C',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customInputToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  customTextInput: {
+    fontFamily: 'Fira-Code',
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 16,
+    // backgroundColor: '#f9f9f9',
+    marginRight: 8,
+    maxHeight: 120,
+    textAlignVertical: 'center',
   },
 });
 

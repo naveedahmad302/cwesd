@@ -1,60 +1,117 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
 import WebinarCard from '../../shared/components/WebinarCard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
-interface Webinar {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  participants: number;
-  status: 'upcoming' | 'live' | 'completed';
-}
+import { useGetWebinarsQuery } from '../../store/api';
+import ScheduleWebinarModal from './components/ScheduleWebinarModal';
 
 const TeacherWebinarScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
-  const onRefresh = useCallback(() => {
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [webinarForm, setWebinarForm] = useState({
+    title: '',
+    description: '',
+    date: '',
+    time: '',
+    duration: '',
+    meetLink: '',
+    courseId: '',
+    sectionId: '',
+  });
+  
+  const { data: webinarsData, isLoading, error, refetch } = useGetWebinarsQuery();
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
-  }, []);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
-  // Mock data - replace with actual data from your API
-  const webinars: Webinar[] = [
-    {
-      id: '1',
-      title: 'Market Analysis Workshop',
-      date: 'Jan 16, 2026',
-      time: '10:00 AM',
-      participants: 28,
-      status: 'upcoming',
-    },
-    {
-      id: '2',
-      title: 'Advanced Trading Strategies',
-      date: 'Jan 18, 2026',
-      time: '2:00 PM',
-      participants: 45,
-      status: 'upcoming',
-    },
-    {
-      id: '3',
-      title: 'Risk Management Basics',
-      date: 'Jan 20, 2026',
-      time: '11:00 AM',
-      participants: 32,
-      status: 'upcoming',
-    },
-  ];
+  const getWebinarStatus = (start: string, end: string): 'upcoming' | 'live' | 'completed' => {
+    const now = new Date();
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    
+    if (now < startDate) return 'upcoming';
+    if (now >= startDate && now <= endDate) return 'live';
+    return 'completed';
+  };
 
-  const handleStartWebinar = (webinarId: string) => {
-    // Implement webinar start logic here
+  const formatDateTime = (isoString: string) => {
+    const date = new Date(isoString);
+    return {
+      date: date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      }),
+      time: date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      })
+    };
+  };
+
+  const handleStartWebinar = (webinarId: string, meetLink: string) => {
+    console.log('Starting webinar:', webinarId, 'Meet link:', meetLink);
+    // You can use Linking.openURL(meetLink) to open the meet link
+    // or navigate to a webinar screen within the app
   };
 
   const handleScheduleWebinar = () => {
-    // Implement schedule webinar logic here
+    setShowScheduleModal(true);
   };
+
+  const handleCloseModal = () => {
+    setShowScheduleModal(false);
+    // Reset form
+    setWebinarForm({
+      title: '',
+      description: '',
+      date: '',
+      time: '',
+      duration: '',
+      meetLink: '',
+      courseId: '',
+      sectionId: '',
+    });
+  };
+
+  const handleCreateWebinar = () => {
+    // TODO: Implement webinar creation API call
+    console.log('Creating webinar:', webinarForm);
+    handleCloseModal();
+    refetch(); // Refresh the webinars list
+  };
+
+  const webinars = webinarsData?.webinars || [];
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#E56B8C" />
+          <StyledText style={styles.loadingText}>Loading webinars...</StyledText>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Icon name="alert-circle-outline" size={48} color="#E56B8C" />
+          <StyledText style={styles.errorText}>Failed to load webinars</StyledText>
+          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+            <StyledText style={styles.retryButtonText}>Retry</StyledText>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -69,20 +126,39 @@ const TeacherWebinarScreen = () => {
           <StyledText style={styles.scheduleButtonText}>Schedule Webinar</StyledText>
         </TouchableOpacity>
         
-        {/* <StyledText style={styles.sectionTitle}>Upcoming Webinars</StyledText> */}
-        
-        {webinars.map((webinar) => (
-          <WebinarCard
-            key={webinar.id}
-            title={webinar.title}
-            date={webinar.date}
-            time={webinar.time}
-            participants={webinar.participants}
-            status={webinar.status}
-            onStartWebinar={() => handleStartWebinar(webinar.id)}
-          />
-        ))}
+        {webinars.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="video-off-outline" size={64} color="#9CA3AF" />
+            <StyledText style={styles.emptyText}>No webinars scheduled</StyledText>
+            <StyledText style={styles.emptySubtext}>Tap "Schedule Webinar" to create your first webinar</StyledText>
+          </View>
+        ) : (
+          webinars.map((webinar) => {
+            const status = getWebinarStatus(webinar.start, webinar.end);
+            const { date, time } = formatDateTime(webinar.start);
+            
+            return (
+              <WebinarCard
+                key={webinar._id}
+                title={webinar.title}
+                date={date}
+                time={time}
+                participants={webinar.presentCount}
+                status={status}
+                onStartWebinar={() => handleStartWebinar(webinar._id, webinar.meetLink)}
+              />
+            );
+          })
+        )}
       </ScrollView>
+      
+      <ScheduleWebinarModal
+        visible={showScheduleModal}
+        onClose={handleCloseModal}
+        onCreate={handleCreateWebinar}
+        form={webinarForm}
+        setForm={setWebinarForm}
+      />
     </View>
   );
 };
@@ -95,18 +171,72 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: '#E56B8C',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
   scheduleButton: {
     marginTop: 30,
     backgroundColor: '#E56B8C',
     borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    // justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14,
     marginBottom: 24,
     gap: 12,
-    width:230
+    width: 230,
   },
   scheduleButtonText: {
     color: '#fff',

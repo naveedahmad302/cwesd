@@ -8,7 +8,7 @@ import type {
 } from '../types/messages.types';
 
 /** Set via env (e.g. react-native-dotenv SOCKET_URL) or leave empty to use REST only */
-const SOCKET_URL = '';
+const SOCKET_URL = 'https://cwesd.onrender.com';
 
 let socket: Socket | null = null;
 
