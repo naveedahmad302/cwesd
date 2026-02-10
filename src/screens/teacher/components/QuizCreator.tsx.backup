@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, FlatList, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import StyledText from '../../../shared/components/StyledText';
 import { Plus, X, Clock, Target, FileText, Save, Eye, EyeOff, ArrowLeft, ChevronDown, Calendar } from 'lucide-react-native';
 import DatePicker from 'react-native-date-picker';
-import { useCreateQuizMutation, useGetCoursesQuery, useLazyGetCourseSectionsQuery, useGetQuizByIdQuery, useLazyGetQuizByIdQuery, useUpdateQuizMutation, useUpdateQuestionMutation, useAddQuestionMutation, useDeleteQuestionMutation } from '../../../store/api';//quizzesApi';
-import QuizQuestionEditor from './QuizQuestionEditor';
-import { showInfoToast, showErrorToast, showSuccessToast } from '../../../utils/toast';
+import { useCreateQuizMutation, useGetCoursesQuery, useLazyGetCourseSectionsQuery } from '../../../store/api';
+import { useUpdateQuizMutation } from '../../../store/api/quizzesApi';
+import QuestionEditor from './QuestionEditor';
 
 interface QuizCreatorProps {
   visible: boolean;
@@ -14,32 +14,16 @@ interface QuizCreatorProps {
   onQuizCreated: () => void;
   editMode?: boolean;
   quizData?: any;
-  questionsMode?: boolean;
-  onQuestionsComplete?: () => void;
 }
 
-const QuizCreator: React.FC<QuizCreatorProps> = ({ 
-  visible, 
-  onClose, 
-  onQuizCreated, 
-  editMode = false, 
-  quizData, 
-  questionsMode = false,
-  onQuestionsComplete 
-}) => {
-  
+const QuizCreator: React.FC<QuizCreatorProps> = ({ visible, onClose, onQuizCreated, editMode = false, quizData }) => {
   const insets = useSafeAreaInsets();
   const [createQuiz] = useCreateQuizMutation();
   const [updateQuiz] = useUpdateQuizMutation();
-  const [addQuestion] = useAddQuestionMutation();
-  const [updateQuestion] = useUpdateQuestionMutation();
-  const [deleteQuestion] = useDeleteQuestionMutation();
-  
-  // Store references to question data getters
-  const [questionDataGetters, setQuestionDataGetters] = useState<Map<string, () => any>>(new Map());
+  const [activeTab, setActiveTab] = useState<'details' | 'questions'>('details');
+  const [questions, setQuestions] = useState<any[]>([]);
   const { data: coursesResponse, isLoading: coursesLoading, error: coursesError, refetch: refetchCourses } = useGetCoursesQuery();
   const [getCourseSections, { isLoading: sectionsLoading }] = useLazyGetCourseSectionsQuery();
-  const [getQuizById, { data: quizDetailData, isLoading: quizDetailLoading }] = useLazyGetQuizByIdQuery();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCourseId, setSelectedCourseId] = useState('');
@@ -48,7 +32,6 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
   const [totalPoints, setTotalPoints] = useState('0');
   const [pointsPerQuestion, setPointsPerQuestion] = useState('2');
   const [loading, setLoading] = useState(false);
-  const [completeQuestionsLoading, setCompleteQuestionsLoading] = useState(false);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleOptions, setShuffleOptions] = useState(false);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(true);
@@ -64,47 +47,6 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
   const [isAvailableFromPicker, setIsAvailableFromPicker] = useState(true);
   const [publishImmediately, setPublishImmediately] = useState(false);
-
-  // Real questions data from API
-  const [questions, setQuestions] = useState<any[]>([]);
-
-  // Memoized fetchCourseSections function
-  const fetchCourseSections = useCallback(async (moodleId: string) => {
-    try {
-      const result = await getCourseSections(moodleId).unwrap();
-      
-      if (result.success && result.data?.sections) {
-        setCourseSections(result.data.sections);
-      } else {
-        setCourseSections([]);
-      }
-    } catch (error: any) {
-      console.error('Error fetching course sections:', error);
-      setCourseSections([]);
-    }
-  }, [getCourseSections]);
-
-  // Fetch quiz details when transitioning to questions mode
-  useEffect(() => {
-    if (questionsMode && quizData && quizData._id) {
-      fetchQuizDetails(quizData._id);
-    }
-  }, [questionsMode, quizData]);
-
-  const fetchQuizDetails = async (quizId: string) => {
-    try {
-      const result = await getQuizById(quizId).unwrap();
-      
-      if (result.success && result.data?.questions) {
-        setQuestions(result.data.questions);
-      } else {
-        setQuestions([]);
-      }
-    } catch (error) {
-      console.error('Error fetching quiz details:', error);
-      setQuestions([]);
-    }
-  };
 
   // Populate form data when in edit mode
   useEffect(() => {
@@ -126,6 +68,7 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
       setSelectedSection(quizData.section || '');
       setSelectedSectionNumber(quizData.sectionNumber || null);
       setPublishImmediately(quizData.publishImmediately || false);
+      setQuestions(quizData.questions || []);
       
       // Fetch course sections if course is selected
       if (quizData.course?.moodleId) {
@@ -134,221 +77,34 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
     } else if (!editMode && visible) {
       // Reset form for create mode
       resetForm();
+      setQuestions([]);
     }
-  }, [editMode, quizData, visible, fetchCourseSections]);
-
-  // Look up section name when courseSections are loaded and we have a sectionNumber
-  useEffect(() => {
-    if (selectedSectionNumber !== null && courseSections.length > 0 && !selectedSection) {
-      const section = courseSections.find(s => s.sectionNumber === selectedSectionNumber);
-      if (section) {
-        setSelectedSection(section.name);
-      }
-    }
-  }, [selectedSectionNumber, courseSections, selectedSection]);
-
-  const handleUpdateQuestion = async (questionId: string, updatedQuestion: any) => {
-    try {
-      await updateQuestion({ questionId, data: updatedQuestion }).unwrap();
-      
-      // Update local state
-      setQuestions(prev => prev.map(q => 
-        q._id === questionId ? { ...q, ...updatedQuestion } : q
-      ));
-      
-      showSuccessToast('Question updated successfully!', 'Success');
-    } catch (error) {
-      console.error('Error updating question:', error);
-      showErrorToast('Failed to update question. Please try again.', 'Error');
-    }
-  };
-
-  const handleDeleteQuestion = async (questionId: string) => {
-    try {
-      // In real app, you'd have a delete question mutation
-      // For now, just update local state
-      setQuestions(prev => prev.filter(q => q._id !== questionId));
-      showSuccessToast('Question deleted successfully!', 'Success');
-    } catch (error) {
-      console.error('Error deleting question:', error);
-      showErrorToast('Failed to delete question. Please try again.', 'Error');
-    }
-  };
-
-  // Function to register question data getter
-  const registerQuestionDataGetter = useCallback((questionId: string, getter: () => any) => {
-    setQuestionDataGetters(prev => new Map(prev.set(questionId, getter)));
-  }, []);
-
-  // Memoized function to create getQuestionData callback for each question
-  const createGetQuestionDataCallback = useCallback((questionId: string) => {
-    return (getter: () => any) => registerQuestionDataGetter(questionId, getter);
-  }, [registerQuestionDataGetter]);
-
-  // Function to save all questions when Complete is clicked
-  const handleCompleteQuestions = async () => {
-    if (!quizData?._id) {
-      showErrorToast('Quiz ID not found', 'Error');
-      return;
-    }
-
-    try {
-      setCompleteQuestionsLoading(true);
-      const questionsToProcess: any[] = [];
-      
-      // Collect all current question data
-      questions.forEach(question => {
-        const getter = questionDataGetters.get(question._id);
-        if (getter) {
-          questionsToProcess.push({
-            original: question,
-            current: getter()
-          });
-        }
-      });
-
-      // Process each question
-      for (const { original, current } of questionsToProcess) {
-        const isNewQuestion = original._id.startsWith('temp_');
-        
-        // Validate question data
-        if (!current.questionText.trim()) {
-          showErrorToast(`Question ${current.order} text is required`, 'Validation Error');
-          return;
-        }
-
-        if (current.type === 'multiple_options' || current.type === 'true_false') {
-          const hasCorrectOption = current.options.some((option: any) => option.isCorrect);
-          if (!hasCorrectOption) {
-            showErrorToast(`Question ${current.order} must have at least one correct option`, 'Validation Error');
-            return;
-          }
-        }
-
-        if (isNewQuestion) {
-          // Add new question
-          const questionData = {
-            questionText: current.questionText,
-            type: current.type,
-            options: current.options,
-            points: current.points,
-            explanation: current.explanation,
-            order: current.order
-          };
-          
-          const result = await addQuestion({ 
-            quizId: quizData._id, 
-            data: questionData 
-          }).unwrap();
-          
-          if (!result.success) {
-            showErrorToast('Failed to add question', 'Error');
-            return;
-          }
-        } else {
-          // Update existing question
-          await updateQuestion({ questionId: original._id, data: current }).unwrap();
-        }
-      }
-
-      showSuccessToast('All questions saved successfully!', 'Success');
-      
-      // Call the complete callback
-      if (onQuestionsComplete) {
-        onQuestionsComplete();
-      }
-      
-    } catch (error) {
-      console.error('Error saving questions:', error);
-      showErrorToast('Failed to save questions. Please try again.', 'Error');
-    } finally {
-      setCompleteQuestionsLoading(false);
-    }
-  };
-
-  const handleAddQuestion = () => {
-    // Create a new question with default values for local editing
-    const newQuestion = {
-      _id: `temp_${Date.now()}`, // Temporary ID for local state
-      questionText: '',
-      type: 'multiple_options',
-      options: [
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false },
-        { text: '', isCorrect: false }
-      ],
-      points: 1,
-      explanation: '',
-      order: questions.length + 1,
-      isNew: true // Flag to identify new questions
-    };
-    
-    // Add to local state for editing
-    setQuestions(prev => [...prev, newQuestion]);
-    // Show toast notification that question is added (but not saved yet)
-    showInfoToast('New question added! Fill in details and click Update Question to save.', 'Question Added');
-  };
-
-  const handleSaveAndContinue = async () => {
-      
-    if (!title.trim()) {
-      showErrorToast('Please enter a quiz title', 'Validation Error');
-      return;
-    }
-    if (!selectedCourseId) {
-      showErrorToast('Please select a course', 'Validation Error');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const quizDataPayload = {
-        title: title.trim(),
-        description: description.trim(),
-        course: selectedCourseId,
-        durationMinutes: Number(duration),
-        maxAttempts: Number(maxAttempts),
-        totalPoints: Number(totalPoints),
-        pointsPerQuestion: Number(pointsPerQuestion),
-        shuffleQuestions,
-        shuffleOptions,
-        showCorrectAnswers,
-        allowReview,
-        status: 'Draft',
-        totalQuestions,
-        availableFrom: availableFrom.toISOString(),
-        availableUntil: availableUntil.toISOString(),
-        section: selectedSection,
-        sectionNumber: selectedSectionNumber
-      };
-
-      if (editMode && quizData) {
-        // Update existing quiz
-        await updateQuiz({ quizId: quizData._id, data: quizDataPayload }).unwrap();
-        Alert.alert('Success', 'Quiz updated successfully!');
-      } else {
-        // Create new quiz
-        await createQuiz(quizDataPayload).unwrap();
-        Alert.alert('Success', 'Quiz created successfully!');
-      }
-      
-      // Call onQuestionsComplete to switch to questions mode
-      if (onQuestionsComplete) {
-        onQuestionsComplete();
-      } else {
-      }
-    } catch (error) {
-      console.error('Error saving quiz:', error);
-      Alert.alert('Error', `Failed to ${editMode ? 'update' : 'create'} quiz. Please try again.`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [editMode, quizData, visible]);
 
   const courses = coursesResponse?.courses || [];
   const selectedCourse = courses.find(c => c._id === selectedCourseId);
-  
+
+  const fetchCourseSections = async (moodleId: string) => {
+    try {
+      const result = await getCourseSections(moodleId).unwrap();
+      console.log('RAW API RESPONSE:', JSON.stringify(result, null, 2));
+      
+      if (result.success && result.data?.sections) {
+        console.log('ALL SECTIONS:', result.data.sections);
+        setCourseSections(result.data.sections);
+      } else {
+        // API failed or returned invalid data
+        console.warn('Course sections API failed:', result.message);
+        console.warn('COURSE_SECTIONS endpoint is not working. Check if endpoint exists on server.');
+        setCourseSections([]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching course sections:', error);
+      console.error('COURSE_SECTIONS endpoint returned error. Endpoint might not exist or server is down.');
+      // Clear sections on any error
+      setCourseSections([]);
+    }
+  };
 
   const handleCourseSelection = (courseId: string, moodleId: string) => {
     setSelectedCourseId(courseId);
@@ -384,11 +140,7 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
         showCorrectAnswers,
         allowReview,
         status: 'Draft',
-        totalQuestions,
-        availableFrom: availableFrom.toISOString(),
-        availableUntil: availableUntil.toISOString(),
-        section: selectedSection,
-        sectionNumber: selectedSectionNumber
+        totalQuestions
       };
 
       if (editMode && quizData) {
@@ -461,63 +213,47 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
   const formatDateTime = (date: Date) => {
     return date.toLocaleString('en-US', {
       month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).replace(/,/, '');
-  };
 
-  // Render course modal independently of main component visibility
-  const renderCourseModal = () => (
-    <Modal
-      visible={courseModalVisible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => {
-        setCourseModalVisible(false);
-      }}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <StyledText style={styles.modalTitle}>Select Course</StyledText>
-            <TouchableOpacity onPress={() => setCourseModalVisible(false)}>
-              <X size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={courses}
-            keyExtractor={(item) => item._id}
-            showsVerticalScrollIndicator={true}
-            renderItem={({ item: course }) => (
-              <TouchableOpacity
-                style={[
-                  styles.modalOption,
-                  selectedCourseId === course._id && styles.selectedModalOption
-                ]}
-                onPress={() => {
-                  handleCourseSelection(course._id, course.moodleId.toString());
-                }}
-              >
-                <StyledText style={[
-                  styles.modalOptionText,
-                  selectedCourseId === course._id && styles.selectedModalOptionText
-                ]}>
-                  {course.fullname}
-                </StyledText>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </View>
-    </Modal>
-  );
+const handleClose = () => {
+  if (!loading) {
+    resetForm();
+    onClose();
+  }
+};
 
-  if (!visible) return renderCourseModal();
+const handleConfirmDateTime = (date: Date) => {
+  if (isAvailableFromPicker) {
+    setAvailableFrom(date);
+  } else {
+    setAvailableUntil(date);
+  }
+  setDatePickerVisible(false);
+};
 
-  return (
+const showDatePicker = (isFrom: boolean) => {
+  setIsAvailableFromPicker(isFrom);
+  setDatePickerVisible(true);
+};
+
+const hideDatePicker = () => {
+  setDatePickerVisible(false);
+};
+
+const formatDateTime = (date: Date) => {
+  return date.toLocaleString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).replace(/,/, '');
+};
+
+if (!visible) return null;
+
+return (
+  <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
     <View style={styles.overlay}>
       <View style={[styles.container, { 
         maxHeight: '95%',
@@ -525,53 +261,53 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
         marginBottom: insets.bottom 
       }]}>
         <View style={styles.header}>
-          {/* <TouchableOpacity style={styles.backButton} onPress={handleClose} disabled={loading}>
-            <ArrowLeft size={20} color="#666" />
-          </TouchableOpacity> */}
-          <StyledText style={styles.title}>
-          {questionsMode ? 'Edit Questions' : editMode ? 'Edit Quiz' : 'Quiz Details'}
-        </StyledText>
+          <StyledText style={styles.title}>{editMode ? 'Edit Quiz' : 'Quiz Details'}</StyledText>
           <TouchableOpacity style={styles.closeButton} onPress={handleClose} disabled={loading}>
             <X size={20} color="#666" />
           </TouchableOpacity>
         </View>
 
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'details' && styles.activeTab]}
+            onPress={() => setActiveTab('details')}
+          >
+            <StyledText style={[styles.tabText, activeTab === 'details' && styles.activeTabText]}>
+              Quiz Details
+            </StyledText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'questions' && styles.activeTab]}
+            onPress={() => setActiveTab('questions')}
+          >
+            <StyledText style={[styles.tabText, activeTab === 'questions' && styles.activeTabText]}>
+              Questions
+            </StyledText>
+          </TouchableOpacity>
+        </View>
+
+        {/* Tab Content */}
         <ScrollView 
           style={[styles.content, { maxHeight: '70%' }]} 
           showsVerticalScrollIndicator={false}
         >
-          {/* Debug info */}
-          {/* <View style={{ padding: 10, backgroundColor: '#f0f0f0', marginBottom: 10 }}>
-            <StyledText>Debug: questionsMode = {questionsMode.toString()}</StyledText>
-            <StyledText>Debug: questions.length = {questions.length}</StyledText>
-          </View> */}
-          
-          {questionsMode ? (
-            // Questions editing mode
-            <View style={styles.questionsContainer}>
-              <StyledText style={styles.sectionTitle}>Quiz Questions</StyledText>
-              <StyledText style={styles.sectionSubtitle}>
-                Edit questions for: {title || 'Untitled Quiz'}
-              </StyledText>
-              
-              {questions.map((question, index) => (
-                <QuizQuestionEditor
-                  key={question._id}
-                  question={question}
-                  index={index}
-                  quizId={quizData?._id}
-                  onUpdate={handleUpdateQuestion}
-                  onDelete={handleDeleteQuestion}
-                  onAddQuestion={handleAddQuestion}
-                  getQuestionData={createGetQuestionDataCallback(question._id)}
-                />
-              ))}
-            </View>
-          ) : (
+          {activeTab === 'details' ? (
             <>
-          <View style={styles.formSection}>
-            {/* <StyledText style={styles.sectionTitle}>Quiz Details</StyledText> */}
+              {/* Existing quiz details form */}
+              <View style={styles.formSection}>
+                {/* <StyledText style={styles.sectionTitle}>Quiz Details</StyledText> */}
 
+                <View style={styles.formGroup}>
+                  <StyledText style={styles.label}>Quiz Title *</StyledText>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter quiz title"
+                    placeholderTextColor="black"
+                    value={title}
+                    onChangeText={setTitle}
+                    editable={!loading}
+                  />
             <View style={styles.formGroup}>
               <StyledText style={styles.label}>Quiz Title *</StyledText>
               <TextInput
@@ -605,9 +341,7 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
                   <View style={[styles.dropdownContainer, styles.halfWidthDropdown]}>
                     <TouchableOpacity
                       style={styles.dropdownButton}
-                      onPress={() => {
-                        setCourseModalVisible(true);
-                      }}
+                      onPress={() => setCourseModalVisible(true)}
                       disabled={loading}
                     >
                       <StyledText style={[
@@ -737,7 +471,9 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
             </View> */}
           </View>
 
-          {/* <View style={styles.settingsSection}>
+          {/* <View style={styles.separatorLine} /> */}
+
+          <View style={styles.settingsSection}>
             <StyledText style={styles.sectionTitle}>Quiz Summary</StyledText>
             <View style={styles.summarySection}>
               <View style={styles.summaryRow}>
@@ -773,7 +509,7 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
                 </View>
               </View>
 
-            </View> */}
+            </View>
             {/* <View style={styles.separatorLine} />
             <StyledText style={styles.sectionTitle}>Quiz Settings</StyledText>
 
@@ -822,71 +558,33 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
                 thumbColor={allowReview ? '#fff' : '#f4f3f4'}
               />
             </View> */}
-          {/* </View> */}
-            </>
-          )}
+          </View>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 30 }]}>
+            <TouchableOpacity
+              style={[styles.footerButton, styles.cancelButton]}
+              onPress={handleClose}
+              disabled={loading}
+            >
+              <ArrowLeft size={16} color="#666" />
+              <StyledText style={styles.cancelButtonText}>Cancel</StyledText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.footerButton, styles.createButton, loading && styles.disabledButton]}
+              onPress={handleCreateQuiz}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <FileText size={16} color="#fff" />
+                  <StyledText style={styles.createButtonText}>{editMode ? 'Update Quiz' : 'Create Quiz'}</StyledText>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </ScrollView>
-
-        {/* Footer buttons */}
-        <View>
-          {questionsMode ? (
-            <View style={styles.footerButtons}>
-              <TouchableOpacity
-                style={[styles.footerButton, styles.cancelButton]}
-                onPress={onClose}
-                disabled={loading}
-              >
-                <ArrowLeft size={16} color="#666" />
-                <StyledText style={styles.cancelButtonText}>Back</StyledText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.footerButton, styles.createButton, completeQuestionsLoading && styles.disabledButton]}
-                onPress={handleCompleteQuestions}
-                disabled={completeQuestionsLoading}
-              >
-                {completeQuestionsLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <FileText size={16} color="#fff" />
-                    <StyledText style={styles.createButtonText}>Complete</StyledText>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.footerButtons}>
-              <TouchableOpacity
-                style={[styles.footerButton, styles.cancelButton]}
-                onPress={handleClose}
-                disabled={loading}
-              >
-                <ArrowLeft size={16} color="#666" />
-                <StyledText style={styles.cancelButtonText}>Cancel</StyledText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.footerButton, styles.createButton, loading && styles.disabledButton]}
-                onPress={() => {
-                  handleSaveAndContinue();
-                }}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <FileText size={16} color="#fff" />
-                    <StyledText style={styles.createButtonText}>
-                      {editMode ? 'Update Quiz' : 'Save & Continue'}
-                    </StyledText>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
 
         <DatePicker
           modal
@@ -897,7 +595,47 @@ const QuizCreator: React.FC<QuizCreatorProps> = ({
           mode="datetime"
         />
 
-        {renderCourseModal()}
+        {/* Course Selection Modal */}
+        <Modal
+          visible={courseModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setCourseModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <StyledText style={styles.modalTitle}>Select Course</StyledText>
+                <TouchableOpacity onPress={() => setCourseModalVisible(false)}>
+                  <X size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={courses}
+                keyExtractor={(item) => item._id}
+                showsVerticalScrollIndicator={true}
+                renderItem={({ item: course }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalOption,
+                      selectedCourseId === course._id && styles.selectedModalOption
+                    ]}
+                    onPress={() => {
+                      handleCourseSelection(course._id, course.moodleId.toString());
+                    }}
+                  >
+                    <StyledText style={[
+                      styles.modalOptionText,
+                      selectedCourseId === course._id && styles.selectedModalOptionText
+                    ]}>
+                      {course.fullname}
+                    </StyledText>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
 
         {/* Section Selection Modal */}
         <Modal
@@ -987,7 +725,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
@@ -1055,10 +793,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'black',
-    marginBottom: 6,
+    marginBottom: 16,
   },
   formGroup: {
-    
     marginBottom: 16,
   },
   label: {
@@ -1139,12 +876,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
-    // paddingBottom: 10,
-  },
-  footerButtons: {
-    flexDirection: 'row',
-    gap: 5,
-    padding: 8,
   },
   footerButton: {
     flexDirection: 'row',
@@ -1152,19 +883,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 7,
-    // paddingHorizontal: 16,
+    paddingHorizontal: 16,
     borderRadius: 8,
     flex: 1,
   },
   cancelButton: {
-    width: '25%',
+
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
   cancelButtonText: {
-    fontSize: 13,
-    // fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '600',
     color: 'black',
   },
   previewButton: {
@@ -1173,16 +904,12 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
   },
   previewButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: 'black',
   },
   createButton: {
     backgroundColor: '#E56B8C',
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 16,
-    width: '40%',
   },
   createButtonText: {
     fontSize: 14,
@@ -1194,7 +921,7 @@ const styles = StyleSheet.create({
   },
   // Dropdown styles
   dropdownsRow: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     gap: 12,
   },
   dropdownContainer: {
@@ -1320,7 +1047,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 2000,
   },
   modalContent: {
     backgroundColor: '#fff',
@@ -1375,15 +1101,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   disabledText: {
-    color: '#9CA3AF',
-  },
-  questionsContainer: {
-    // padding: 16,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 20,
+    color: '#ccc',
   },
 });
 

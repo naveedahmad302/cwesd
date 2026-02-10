@@ -22,6 +22,13 @@ export const API_ENDPOINTS = {
   QUIZZES: {
     LIST: '/quizzes',
     BY_ID: (quizId: string) => `/quizzes/${quizId}`,
+    DELETE: (quizId: string) => `/quizzes/${quizId}`,
+    UPDATE: (quizId: string) => `/quizzes/${quizId}`,
+    QUESTIONS: {
+      ADD: (quizId: string) => `/quizzes/${quizId}/questions`,
+      UPDATE: (questionId: string) => `/quizzes/questions/${questionId}`,
+      DELETE: (questionId: string) => `/quizzes/questions/${questionId}`,
+    },
     ATTEMPT: (quizId: string) => `/quizzes/${quizId}/attempt`,
     SUBMIT: (quizId: string) => `/quizzes/${quizId}/submit`,
     

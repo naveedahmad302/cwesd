@@ -1,5 +1,6 @@
 import React from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   House,
   Users,
@@ -31,6 +32,7 @@ import ProfileHeaderButton from '../components/ProfileHeaderButton';
 const Drawer = createDrawerNavigator();
 
 const TeacherDrawerNavigator = () => {
+  const insets = useSafeAreaInsets();
   return (
     <Drawer.Navigator
       initialRouteName="Dashboard"
@@ -44,6 +46,7 @@ const TeacherDrawerNavigator = () => {
           shadowOffset: { width: 0, height: 0 },
           shadowRadius: 0,
           elevation: 0,
+          paddingTop: insets.top,
         },
         headerTintColor: 'black',
         headerTitleStyle: {
@@ -87,6 +90,7 @@ const TeacherDrawerNavigator = () => {
           shadowOffset: { width: 0, height: 0 },
           shadowRadius: 0,
           elevation: 0,
+          paddingTop: insets.top,
         },
       })}
     >

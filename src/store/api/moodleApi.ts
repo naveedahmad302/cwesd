@@ -30,7 +30,7 @@ export const moodleApi = createApi({
   baseQuery: moodleBaseQuery,
   tagTypes: ['Moodle'],
   endpoints: build => ({
-    getCourseSections: build.query<MoodleCourseSectionsApiResponse, string>({
+    getCourseSections: build.query<any, string>({
       query: moodleId => ({ url: API_ENDPOINTS.MOODLE.COURSE_SECTIONS(moodleId) }),
       providesTags: (_result, _error, moodleId) => [{ type: 'Moodle', id: moodleId }],
     }),

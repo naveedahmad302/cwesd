@@ -1,9 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, RefreshControl } from 'react-native';
 import StyledText from '../../shared/components/StyledText';
-import { FileCheck, TrendingUp, Users, BarChart, Plus, Search, Eye, User, ChevronDown, Check, MoreVertical, FileText } from 'lucide-react-native';
-import { useGetCoursesQuery, useGetQuizzesQuery } from '../../store/api';
+import { Plus, Search, Eye, User, ChevronDown, FileText, SquarePen ,Trash2, Check} from 'lucide-react-native';
+import { useGetCoursesQuery, useGetQuizzesQuery, useDeleteQuizMutation } from '../../store/api';
+import { useUpdateQuizMutation } from '../../store/api/quizzesApi';
 import QuizCreator from './components/QuizCreator';
+import { Loading } from '../../shared/components';
+import { ConfirmationModal } from '../../utils/toast';
 
 const TeacherQuizzesScreen = () => {
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -11,8 +14,15 @@ const TeacherQuizzesScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showQuizCreator, setShowQuizCreator] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [quizToDelete, setQuizToDelete] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [quizToEdit, setQuizToEdit] = useState<any>(null);
+  const [questionsMode, setQuestionsMode] = useState(false);
 
   const { data: coursesResponse } = useGetCoursesQuery();
+  const [deleteQuiz] = useDeleteQuizMutation();
+  const [updateQuiz] = useUpdateQuizMutation();
   const {
     data: quizzesResponse,
     isLoading: loading,
@@ -39,6 +49,68 @@ const TeacherQuizzesScreen = () => {
     await refetch();
     setRefreshing(false);
   }, [refetch]);
+
+  const handleDeleteQuiz = useCallback((quizId: string, quizTitle: string) => {
+    setQuizToDelete(quizId);
+    setDeleteModalVisible(true);
+  }, []);
+
+  const confirmDeleteQuiz = useCallback(async () => {
+    if (!quizToDelete) return;
+    
+    try {
+      await deleteQuiz(quizToDelete).unwrap();
+      setDeleteModalVisible(false);
+      setQuizToDelete(null);
+      await refetch();
+    } catch (error) {
+      console.error('Error deleting quiz:', error);
+      setDeleteModalVisible(false);
+      setQuizToDelete(null);
+    }
+  }, [deleteQuiz, quizToDelete, refetch]);
+
+  const cancelDeleteQuiz = useCallback(() => {
+    setDeleteModalVisible(false);
+    setQuizToDelete(null);
+  }, []);
+
+  const handleEditQuiz = useCallback((quiz: any) => {
+    setQuizToEdit(quiz);
+    setEditMode(true);
+    setShowQuizCreator(true);
+  }, []);
+
+  const handleCloseQuizCreator = useCallback(() => {
+    setShowQuizCreator(false);
+    setEditMode(false);
+    setQuizToEdit(null);
+    setQuestionsMode(false);
+  }, []);
+
+  const handleQuizSaved = useCallback(() => {
+    setShowQuizCreator(false);
+    setEditMode(false);
+    setQuizToEdit(null);
+    setQuestionsMode(false);
+    refetch();
+  }, [refetch]);
+
+  const handleQuestionsComplete = useCallback(() => {
+    setQuestionsMode(false);
+    setEditMode(false);
+    setQuizToEdit(null);
+    setShowQuizCreator(false);
+    refetch();
+  }, [refetch]);
+
+  const handleSaveAndContinue = useCallback(() => {
+    setQuestionsMode(true);
+  }, []);
+
+  const handleTransitionToQuestions = useCallback(() => {
+    setQuestionsMode(true);
+  }, []);
 
   const errorMessage = isError && quizzesError
     ? (quizzesError as { data?: { message?: string }; message?: string })?.data?.message ?? (quizzesError as { message?: string })?.message ?? 'Failed to fetch quizzes'
@@ -68,6 +140,10 @@ const TeacherQuizzesScreen = () => {
     maxAttempts: quiz.maxAttempts
   });
 
+  if (loading) {
+    return <Loading isLoading={loading} overlay={false} />;
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -76,12 +152,7 @@ const TeacherQuizzesScreen = () => {
           <RefreshControl refreshing={refreshing || isFetching} onRefresh={onRefresh} colors={['#E56B8C']} />
         }
       >
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#E56B8C" />
-            <StyledText style={styles.loadingText}>Loading quizzes...</StyledText>
-          </View>
-        ) : errorMessage ? (
+        {errorMessage ? (
           <View style={styles.errorContainer}>
             <StyledText style={styles.errorText}>{errorMessage}</StyledText>
             <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
@@ -93,37 +164,33 @@ const TeacherQuizzesScreen = () => {
             {/* <StyledText style={styles.title}>Quizzes</StyledText>
             <StyledText style={styles.subtitle}>Manage quizzes and assessments</StyledText>
              */}
-            <View style={styles.cardsContainer}>
-              <View style={styles.statCard}>
-                <View style={styles.statContent}>
-                  <StyledText style={styles.statTitle}>Total Quizzes</StyledText>
-                  <StyledText style={styles.statNumber}>{totalQuizzes}</StyledText>
+            <View style={styles.statsContainer}>
+              <View style={styles.card}>
+                <View>
+                  <StyledText style={styles.cardTitle}>Total Quizzes</StyledText>
+                  <StyledText style={styles.cardValue}>{totalQuizzes}</StyledText>
                 </View>
-                <FileCheck size={24} color="#3b82f6" />
-              </View>
-              
-              <View style={styles.statCard}>
-                <View style={styles.statContent}>
-                  <StyledText style={styles.statTitle}>Published</StyledText>
-                  <StyledText style={styles.statNumber}>{publishedQuizzes}</StyledText>
-                </View>
-                <TrendingUp size={24} color="#10b981" />
-              </View>
-              
-              <View style={styles.statCard}>
-                <View style={styles.statContent}>
-                  <StyledText style={styles.statTitle}>Total Submissions</StyledText>
-                  <StyledText style={styles.statNumber}>{totalSubmissions}</StyledText>
-                </View>
-                <Users size={24} color="#8b5cf6" />
               </View>
 
-              <View style={styles.statCard}>
-                <View style={styles.statContent}>
-                  <StyledText style={styles.statTitle}>Courses</StyledText>
-                  <StyledText style={styles.statNumber}>{uniqueCourses}</StyledText>
+              <View style={styles.card}>
+                <View>
+                  <StyledText style={styles.cardTitle}>Published</StyledText>
+                  <StyledText style={styles.cardValue}>{publishedQuizzes}</StyledText>
                 </View>
-                <BarChart size={24} color="#f97316" />
+              </View>
+
+              <View style={styles.card}>
+                <View>
+                  <StyledText style={styles.cardTitle}>Total Submissions</StyledText>
+                  <StyledText style={styles.cardValue}>{totalSubmissions}</StyledText>
+                </View>
+              </View>
+
+              <View style={styles.card}>
+                <View>
+                  <StyledText style={styles.cardTitle}>Courses</StyledText>
+                  <StyledText style={styles.cardValue}>{uniqueCourses}</StyledText>
+                </View>
               </View>
             </View>
         
@@ -156,27 +223,29 @@ const TeacherQuizzesScreen = () => {
             
             {dropdownVisible && (
               <View style={styles.dropdownMenu}>
-                {courses.map((course, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.dropdownOption,
-                      selectedCourse === course && styles.selectedOption
-                    ]}
-                    onPress={() => {
-                      setSelectedCourse(course);
-                      setDropdownVisible(false);
-                    }}
-                  >
-                    <StyledText style={[
-                      styles.dropdownOptionText,
-                      selectedCourse === course && styles.selectedOptionText
-                    ]}>
-                      {course}
-                    </StyledText>
-                    {selectedCourse === course && <Check size={16} color="#fff" />}
-                  </TouchableOpacity>
-                ))}
+                <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={true}>
+                  {courses.map((course, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.dropdownOption,
+                        selectedCourse === course && styles.selectedOption
+                      ]}
+                      onPress={() => {
+                        setSelectedCourse(course);
+                        setDropdownVisible(false);
+                      }}
+                    >
+                      <StyledText style={[
+                        styles.dropdownOptionText,
+                        selectedCourse === course && styles.selectedOptionText
+                      ]}>
+                        {course}
+                      </StyledText>
+                      {selectedCourse === course && <Check size={16} color="#fff" />}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
             )}
           </View>
@@ -185,13 +254,21 @@ const TeacherQuizzesScreen = () => {
             {filteredQuizzes.map((quiz: any) => {
               const transformedQuiz = transformQuizData(quiz);
               return (
-                <TouchableOpacity key={transformedQuiz.id} style={styles.quizCard}>
+                <View key={transformedQuiz.id} style={styles.quizCard}>
                   <View style={styles.quizCardHeader}>
                     <View style={styles.quizTypeLabel}>
                       <FileText size={14} color="#3F79FD" />
                       <StyledText style={styles.quizTypeText}>Quiz</StyledText>
                     </View>
-                    <MoreVertical size={20} color="#6b7280" />
+                    <View style={styles.quizCardActions}>
+                      <TouchableOpacity onPress={() => handleEditQuiz(quiz)}>
+                        <SquarePen size={20} color="black" />
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity onPress={() => handleDeleteQuiz(transformedQuiz.id, transformedQuiz.title)}>
+                        <Trash2 size={20} color="black" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   <StyledText style={styles.quizCardTitle}>{transformedQuiz.title}</StyledText>
                   <View style={styles.quizStatsRow}>
@@ -210,9 +287,9 @@ const TeacherQuizzesScreen = () => {
                       </View>
                       <StyledText style={styles.courseName}>{transformedQuiz.course}</StyledText>
                     </View>
-                    <Eye size={20} color="#6b7280" />
+                    {/* <Eye size={20} color="#6b7280" /> */}
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -224,12 +301,23 @@ const TeacherQuizzesScreen = () => {
       
       <QuizCreator
         visible={showQuizCreator}
-        onClose={() => setShowQuizCreator(false)}
-        onQuizCreated={() => {
-          setShowQuizCreator(false);
-          refetch();
-        }}
-        courses={courses}
+        onClose={handleCloseQuizCreator}
+        onQuizCreated={handleQuizSaved}
+        editMode={editMode}
+        quizData={quizToEdit}
+        questionsMode={questionsMode}
+        onQuestionsComplete={handleTransitionToQuestions}
+      />
+      
+      <ConfirmationModal
+        visible={deleteModalVisible}
+        onClose={cancelDeleteQuiz}
+        onConfirm={confirmDeleteQuiz}
+        title="Delete Quiz"
+        message="Are you sure you want to delete this quiz? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmColor="#E53E3E"
       />
     </View>
   );
@@ -254,40 +342,45 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 20,
   },
-  cardsContainer: {
-    flexDirection: 'column',
-    gap: 15,
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 10,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
+  card: {
+    width: '48%',
+    backgroundColor: 'white',
     borderRadius: 12,
+    padding: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  statContent: {
-    flex: 1,
+  cardTitle: {
+    fontSize: 13,
+    color: '#888888',
   },
-  statNumber: {
-    fontSize: 32,
+  cardValue: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    color: 'black',
   },
-  statTitle: {
-    fontSize: 14,
-    color: '#666',
+  cardsContainer: {
+    flexDirection: 'column',
+    gap: 15,
   },
   // New Design Styles
   allQuizzesSection: {
-    marginTop: 30,
+    // marginTop: 10,
   },
   headerRow: {
     flexDirection: 'row',
@@ -368,7 +461,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     zIndex: 1000,
-    minWidth: 370,
+    minWidth: 270,
+    maxHeight: 250,
+  },
+  dropdownScroll: {
+    maxHeight: 250,
   },
   dropdownOption: {
     flexDirection: 'row',
@@ -407,6 +504,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  quizCardActions: {
+    flexDirection: 'row',
+    gap: 20,
   },
   quizTypeLabel: {
     borderRadius:5,
@@ -464,18 +565,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'black',
   },
-  // Loading and Error States
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 12,
-  },
+  // Error States
   errorContainer: {
     flex: 1,
     justifyContent: 'center',

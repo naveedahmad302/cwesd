@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndi
 import StyledText from '../../shared/components/StyledText';
 import { UserPlus, Mail, Download, Users, GraduationCap, TrendingUp, Award, Search, SlidersHorizontal, Eye, MessageSquare, MoreVertical } from 'lucide-react-native';
 import { useGetStudentsQuery } from '../../store/api';
+import StudentDetail from './components/StudentDetail';
 
 function formatLastActive(lastSeen: string) {
   if (!lastSeen) return 'Never';
@@ -22,6 +23,7 @@ const TeacherStudentsScreen = () => {
   const [selectedStatus, setSelectedStatus] = useState('All Status');
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
 
   const {
     data: studentsResponse,
@@ -55,7 +57,14 @@ const TeacherStudentsScreen = () => {
       moodleSyncStatus: student.moodleDetails?.moodleSyncStatus || 'not_attempted',
       fatherName: student.fatherName,
       address: student.address,
+      permanentAddress: student.permanentAddress,
       enrolledCourses: student.enrolledCourses || [],
+      // Additional fields for StudentDetail
+      createdAt: student.createdAt,
+      studentId: student.studentId,
+      cnicPicFront: student.cnicPicFront,
+      cnicPicBack: student.cnicPicBack,
+      presence: student.presence,
     }));
   }, [studentsResponse]);
 
@@ -123,6 +132,15 @@ const TeacherStudentsScreen = () => {
     );
   }
 
+  if (selectedStudent) {
+    return (
+      <StudentDetail
+        student={selectedStudent}
+        onBack={() => setSelectedStudent(null)}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -131,21 +149,7 @@ const TeacherStudentsScreen = () => {
           <RefreshControl refreshing={refreshing || isFetching} onRefresh={onRefresh} colors={['#E56B8C']} />
         }
       >
-        {/* <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.inviteButton}>
-            <UserPlus color="white" size={20} />
-            <StyledText style={styles.inviteButtonText}>Invite Students</StyledText>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.announcementButton}>
-            <Mail color="black" size={20} />
-            <StyledText style={styles.announcementButtonText}>Send Announcement</StyledText>
-          </TouchableOpacity>
-        </View> */}
-
-        {/* <TouchableOpacity style={styles.exportButton}>
-          <Download color="black" size={20} />
-          <StyledText style={styles.exportButtonText}>Export List</StyledText>
-        </TouchableOpacity> */}
+        
 
         <View style={styles.statsContainer}>
           <View style={styles.card}>
@@ -267,7 +271,7 @@ const TeacherStudentsScreen = () => {
                 <StyledText style={[styles.gradeText, styles.gradeColumn]}>{student.grade}</StyledText>
                 <StyledText style={[styles.lastActiveText, styles.lastActiveColumn]}>{student.lastActive}</StyledText>
                 <View style={[styles.actionsContainer, styles.actionsColumn]}>
-                  <TouchableOpacity style={styles.actionButton}>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => setSelectedStudent(student)}>
                     <Eye color="#888888" size={16} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionButton}>

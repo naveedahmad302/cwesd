@@ -1,9 +1,11 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
 import StyledText from './StyledText';
 import { House, BookOpen, Users, FileCheck, HelpCircle, MessageSquare, Video, Calendar as CalendarIcon, User } from 'lucide-react-native';
 import { DrawerContentComponentProps } from '@react-navigation/drawer';
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
   const { state } = props;
@@ -14,6 +16,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <StyledText style={styles.headerTitle}>WTE Program</StyledText>
         <StyledText style={styles.headerSubtitle}>Teacher Portal</StyledText>
       </View>
+      
 
       <View style={styles.sectionContainer}>
         <StyledText style={styles.sectionTitle}>Navigation</StyledText>
@@ -24,7 +27,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
               key={route.key}
               label={route.name}
               onPress={() => props.navigation.navigate(route.name)} 
-              icon={({ size, color }) => <View style={styles.iconContainer}><IconComponent color={state.routeNames[state.index] === route.name ? '#000000' : '#000000'} size={size} /></View>} 
+              icon={({ size, color }) => <View style={styles.iconContainer}><IconComponent color={state.routeNames[state.index] === route.name ? '#000000' : '#000000'} size={screenWidth < 360 ? 18 : 22} /></View>} 
               labelStyle={[styles.drawerLabel, state.routeNames[state.index] === route.name && styles.activeLabel]}
               style={[styles.drawerItem, state.routeNames[state.index] === route.name && styles.activeItem]}
               focused={state.routeNames[state.index] === route.name}
@@ -38,7 +41,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItem 
           label="Chat" 
           onPress={() => props.navigation.navigate('Chat')} 
-          icon={({ size, color }) => <View style={styles.iconContainer}><MessageSquare color={props.state.routeNames[props.state.index] === 'Chat' ? '#000000' : '#000000'} size={size} /></View>} 
+          icon={({ size, color }) => <View style={styles.iconContainer}><MessageSquare color={props.state.routeNames[props.state.index] === 'Chat' ? '#000000' : '#000000'} size={screenWidth < 360 ? 18 : 22} /></View>} 
           labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Chat' && styles.activeLabel]}
           style={[styles.drawerItem, props.state.routeNames[props.state.index] === 'Chat' && styles.activeItem]}
           focused={props.state.routeNames[props.state.index] === 'Chat'}
@@ -46,7 +49,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItem 
           label="Schedule Webinar" 
           onPress={() => props.navigation.navigate('Schedule Webinar')} 
-          icon={({ size, color }) => <View style={styles.iconContainer}><Video color={props.state.routeNames[props.state.index] === 'Schedule Webinar' ? '#000000' : '#000000'} size={size} /></View>} 
+          icon={({ size, color }) => <View style={styles.iconContainer}><Video color={props.state.routeNames[props.state.index] === 'Schedule Webinar' ? '#000000' : '#000000'} size={screenWidth < 360 ? 18 : 22} /></View>} 
           labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Schedule Webinar' && styles.activeLabel]}
           style={[styles.drawerItem, props.state.routeNames[props.state.index] === 'Schedule Webinar' && styles.activeItem]}
           focused={props.state.routeNames[props.state.index] === 'Schedule Webinar'}
@@ -54,7 +57,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItem 
           label="Calendar" 
           onPress={() => props.navigation.navigate('Calendar')} 
-          icon={({ size, color }) => <View style={styles.iconContainer}><CalendarIcon color={props.state.routeNames[props.state.index] === 'Calendar' ? '#000000' : '#000000'} size={size} /></View>} 
+          icon={({ size, color }) => <View style={styles.iconContainer}><CalendarIcon color={props.state.routeNames[props.state.index] === 'Calendar' ? '#000000' : '#000000'} size={screenWidth < 360 ? 18 : 22} /></View>} 
           labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Calendar' && styles.activeLabel]}
           style={[styles.drawerItem, props.state.routeNames[props.state.index] === 'Calendar' && styles.activeItem]}
           focused={props.state.routeNames[props.state.index] === 'Calendar'}
@@ -66,7 +69,7 @@ const TeacherDrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         <DrawerItem 
           label="Profile" 
           onPress={() => props.navigation.navigate('Profile')} 
-          icon={({ size, color }) => <View style={styles.iconContainer}><User color={props.state.routeNames[props.state.index] === 'Profile' ? '#000000' : '#000000'} size={size} /></View>} 
+          icon={({ size, color }) => <View style={styles.iconContainer}><User color={props.state.routeNames[props.state.index] === 'Profile' ? '#000000' : '#000000'} size={screenWidth < 360 ? 18 : 22} /></View>} 
           labelStyle={[styles.drawerLabel, props.state.routeNames[props.state.index] === 'Profile' && styles.activeLabel]}
           style={[styles.drawerItem, props.state.routeNames[props.state.index] === 'Profile' && styles.activeItem]}
           focused={props.state.routeNames[props.state.index] === 'Profile'}
@@ -90,46 +93,47 @@ const getIconComponent = (routeName: string) => {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    padding: 20,
+    paddingBottom: screenWidth < 360 ? 12 : 2,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0FF',
-    paddingHorizontal: 10,
+    borderBottomColor: '#e8e8e8ff',
+    paddingHorizontal: screenWidth < 360 ? 8 : 10,
+    paddingTop: screenWidth < 360 ? 16 : 2,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: screenWidth < 360 ? 20 : screenWidth < 400 ? 22 : 24,
     fontWeight: 'bold',
     color: '#1E1E1E',
   },
   iconContainer: {
     marginLeft: 0,
+    marginRight: screenWidth < 360 ? 8 : 5,
   },
   drawerLabel: {
     color: '#000000',
     fontFamily: 'FiraCode-Regular',
-    fontSize: 16,
-    // paddingVertical: 2,
-    // marginVertical: 0,
-    lineHeight: 16,
+    fontSize: screenWidth < 360 ? 14 : 16,
+    lineHeight: screenWidth < 360 ? 14 : 18,
   },
   drawerItem: {
     marginVertical: 0,
-    paddingVertical: 0,
-    minHeight: 46,
-    height: 40,
+    paddingVertical: screenWidth < 360 ? 8 : 0,
+    paddingHorizontal: screenWidth < 360 ? 8 : 0,
+    minHeight: screenWidth < 360 ? 40 : 48,
     justifyContent: 'center',
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#888888',
+    fontSize: screenWidth < 360 ? 12 : 14,
+    color: '#727272ff',
   },
   sectionContainer: {
-    paddingTop: 20,
+    paddingTop: screenWidth < 360 ? 12 : 20,
+    paddingHorizontal: screenWidth < 360 ? 8 : 1,
   },
   sectionTitle: {
-    fontSize: 14,
-    color: '#888888',
-    marginBottom: 8,
-    paddingHorizontal: 10,
+    fontSize: screenWidth < 360 ? 12 : 14,
+    color: '#727272ff',
+    marginBottom: screenWidth < 360 ? 6 : 8,
+    paddingHorizontal: 0,
   },
   activeLabel: {
     color: 'black',
@@ -138,6 +142,7 @@ const styles = StyleSheet.create({
   activeItem: {
     backgroundColor: '#00FFCC',
     borderRadius: 8,
+    // marginHorizontal: screenWidth < 360 ? 4 : 8,
   },
 });
 

@@ -13,6 +13,14 @@ const TeacherGradesScreen = () => {
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
 
+  // Assignment grade stats
+  const [assignmentStats, setAssignmentStats] = useState({
+    pendingGrades: 0,
+    graded: 0,
+    notSubmitted: 0,
+    totalAssignments: 0,
+  });
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 800);
@@ -39,49 +47,53 @@ const TeacherGradesScreen = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#E56B8C']} />
         }
       >
-        <StyledText style={styles.title}>Grades</StyledText>
+        {/* <StyledText style={styles.title}>Grades</StyledText>
         <StyledText style={styles.subtitle}>Manage student grades</StyledText>
+         */}
         
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          <View style={styles.buttonRow}>
-
-          <TouchableOpacity style={styles.exportButton}>
-            <Download size={20} color="#FFFFFF" />
-            <StyledText style={styles.exportButtonText}>Export Grades</StyledText>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.secondaryButton}>
-            <MessageSquare size={20} color="#000000" />
-            <StyledText style={styles.secondaryButtonText}>Send Feedback</StyledText>
-          </TouchableOpacity>
+        
+        {/* Assignment Grade Cards */}
+        <View style={styles.statsContainer}>
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Pending Grades</StyledText>
+              <StyledText style={styles.cardValue}>{assignmentStats.pendingGrades}</StyledText>
+            </View>
           </View>
-          
-          <TouchableOpacity style={styles.secondaryButton}>
-            <Calendar size={20} color="#000000" />
-            <StyledText style={styles.secondaryButtonText}>Grade Schedule</StyledText>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.secondaryButton}>
-            <RefreshCw size={20} color="#000000" />
-            <StyledText style={styles.secondaryButtonText}>Refresh Data</StyledText>
-          </TouchableOpacity>
+
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Graded</StyledText>
+              <StyledText style={styles.cardValue}>{assignmentStats.graded}</StyledText>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Not Submitted</StyledText>
+              <StyledText style={styles.cardValue}>{assignmentStats.notSubmitted}</StyledText>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View>
+              <StyledText style={styles.cardTitle}>Total Assignments</StyledText>
+              <StyledText style={styles.cardValue}>{assignmentStats.totalAssignments}</StyledText>
+            </View>
+          </View>
         </View>
-        
-        {/* Assignment Cards */}
-        
         {/* Assignment Management Section */}
         <View style={styles.assignmentManagementSection}>
           {/* Search and Filter Bar */}
           <View style={styles.searchFilterContainer}>
             <View style={styles.searchBar}>
-              <Search size={20} color="#9CA3AF" />
+              <Search size={18} color="black" />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search submissions..."
                 value={searchText}
                 onChangeText={setSearchText}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="black"
               />
             </View>
             
@@ -126,27 +138,31 @@ const TeacherGradesScreen = () => {
           {/* Main Content Card */}
           {activeTab === 'table' ? (
             <View style={styles.contentCard}>
-              {/* Table Header */}
-              <View style={styles.tableHeader}>
-                <StyledText style={styles.headerText}>Assignment</StyledText>
-                <StyledText style={styles.headerText}>Course</StyledText>
-                <StyledText style={styles.headerText}>Submissions</StyledText>
-                <StyledText style={styles.headerText}>Graded</StyledText>
-                <StyledText style={styles.headerText}>Actions</StyledText>
-              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                <View>
+                  {/* Table Header */}
+                  <View style={styles.tableHeader}>
+                    <StyledText style={styles.headerText}>Assignment</StyledText>
+                    <StyledText style={styles.headerText}>Course</StyledText>
+                    <StyledText style={styles.headerText}>Submissions</StyledText>
+                    <StyledText style={styles.headerText}>Graded</StyledText>
+                    <StyledText style={styles.headerText}>Actions</StyledText>
+                  </View>
 
-              {/* Empty State */}
-              <View style={styles.emptyState}>
-                <View style={styles.targetIconLarge}>
-                  <View style={styles.targetOuter} />
-                  <View style={styles.targetMiddle} />
-                  <View style={styles.targetInner} />
+                  {/* Empty State */}
+                  <View style={styles.emptyState}>
+                    <View style={styles.targetIconLarge}>
+                      <View style={styles.targetOuter} />
+                      <View style={styles.targetMiddle} />
+                      <View style={styles.targetInner} />
+                    </View>
+                    <StyledText style={styles.emptyStateTitle}>No assignments found</StyledText>
+                    <StyledText style={styles.emptyStateSubtitle}>
+                      No assignments are available at the moment
+                    </StyledText>
+                  </View>
                 </View>
-                <StyledText style={styles.emptyStateTitle}>No assignments found</StyledText>
-                <StyledText style={styles.emptyStateSubtitle}>
-                  No assignments are available at the moment
-                </StyledText>
-              </View>
+              </ScrollView>
             </View>
           ) : (
             <View style={styles.analyticsContent}>
@@ -314,6 +330,39 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Stats container for assignment grade cards
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 10,
+  },
+  card: {
+    width: '48%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: 13,
+    color: '#888888',
+  },
+  cardValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'black',
   },
   cardsContainer: {
     flexDirection: 'column',
@@ -531,65 +580,67 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   searchFilterContainer: {
-    marginBottom: 20,
+    marginBottom: 10,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     borderRadius: 8,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    // paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginBottom: 12,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
+    marginLeft: 10,
+    fontSize: 14,
     color: '#1F2937',
   },
   filterButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    gap: 5,
+    marginBottom: 5,
   },
   filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    flex: 1,
+    backgroundColor: '#F8F9FA',
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    gap: 8,
+    gap: 6,
   },
   filterButtonText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: 'black',
     fontWeight: '500',
   },
   assignmentCount: {
     fontSize: 14,
-    color: '#6B7280',
+    color: 'black',
     textAlign: 'right',
   },
   tabsContainer: {
-    borderRadius:8,
-    backgroundColor:'#F0F0FF',
+    borderRadius: 8,
+    backgroundColor: '#F0F0FF',
     flexDirection: 'row',
     gap: 8,
     marginBottom: 20,
-    width:'97%'
+    width: '100%',
   },
   tab: {
     margin:5,
     // backgroundColor: '#F3F4F6',
     borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   activeTab: {
     backgroundColor: 'white',
@@ -597,7 +648,7 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
+    color: 'black',
   },
   activeTabText: {
     color: 'black',
@@ -605,7 +656,8 @@ const styles = StyleSheet.create({
   contentCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 20,
+    paddingVertical:10,
+    paddingHorizontal: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -618,16 +670,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
     marginBottom: 20,
+    minWidth: 600,
   },
   headerText: {
-    flex: 1,
+    width: 120,
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: 'black',
+    paddingHorizontal: 8,
   },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
+    minWidth: 600,
   },
   targetIconLarge: {
     width: 80,
@@ -674,14 +729,19 @@ const styles = StyleSheet.create({
   analyticsContent: {
     // backgroundColor:'blue',
     // paddingVertical: 20,
-    gap: 16,
+    gap: 12,
   },
   analyticsCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 20,
     borderWidth:1,
-    borderColor:'#CECED2',
+    borderColor:'#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
     
   },
   analyticsCardTitle: {

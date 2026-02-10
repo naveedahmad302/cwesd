@@ -49,12 +49,10 @@ const TeacherWebinarScreen = () => {
   ];
 
   const handleStartWebinar = (webinarId: string) => {
-    console.log('Starting webinar:', webinarId);
     // Implement webinar start logic here
   };
 
   const handleScheduleWebinar = () => {
-    console.log('Schedule new webinar');
     // Implement schedule webinar logic here
   };
 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl, TextInput, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppSelector } from '../../store';
 import { Video, Plus, FileCheck, BookOpen, Users, MessageSquare, Clock, Calendar, MonitorPlay, Search } from 'lucide-react-native';
 import CourseCard from '../../shared/components/CourseCard';
@@ -7,13 +8,14 @@ import ScheduleWebinarModal from './components/ScheduleWebinarModal';
 import { useGetCoursesQuery, useGetTeacherStatsQuery } from '../../store/api';
 import { useGetEventsQuery, useLazyGetEventsQuery } from '../../store/api';
 import { useGetAssignmentsQuery, useLazyGetAssignmentsQuery } from '../../store/api/moodleApi';
-
+import Loading from '../../shared/components/Loading';
 const { width, height } = Dimensions.get('window');
 const isSmallScreen = width < 375;
 const isMediumScreen = width >= 375 && width < 414;
 const isLargeScreen = width >= 414;
 
 const TeacherDashboardScreen = () => {
+  const insets = useSafeAreaInsets();
   const user = useAppSelector(state => state.user.user);
   const {
     data: coursesResponse,
@@ -100,9 +102,7 @@ const TeacherDashboardScreen = () => {
           }).unwrap()
         );
         const assignmentsResults = await Promise.all(assignmentsPromises);
-        console.log('Assignments API Results:', assignmentsResults);
         const allAssignmentsData = assignmentsResults.flatMap((result: any) => result.data?.courses || []);
-        console.log('All Assignments Data:', allAssignmentsData);
         setAllAssignments(allAssignmentsData);
         
       } catch (error) {
@@ -220,9 +220,7 @@ const TeacherDashboardScreen = () => {
   }, [refetchCourses, refetchStats, courses, getEvents, getAssignments]);
 
   const handleScheduleWebinar = () => {
-    console.log('handleScheduleWebinar called');
     setShowWebinarModal(true);
-    console.log('showWebinarModal set to true');
   };
 
   const handleCloseWebinarModal = () => {
@@ -241,18 +239,15 @@ const TeacherDashboardScreen = () => {
 
   const handleCreateWebinar = () => {
     // TODO: Implement webinar creation API call
-    console.log('Creating webinar:', webinarForm);
     handleCloseWebinarModal();
   };
 
   const handleCreateModule = () => {
     // Navigate to module creation screen
-    console.log('Navigate to create module');
   };
 
   const handleGradeAssignments = () => {
     // Navigate to grading screen
-    console.log('Navigate to grade assignments');
   };
 
   const renderCourseItem = useCallback(({ item }: { item: any }) => (
@@ -290,18 +285,13 @@ const TeacherDashboardScreen = () => {
   ), []);
 
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF69B4" />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
-      </View>
-    );
+    return <Loading />;
   }
   
   return (
     <>
     <FlatList
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top + 20 }]}
       refreshControl={
         <RefreshControl refreshing={refreshing || isFetching} onRefresh={onRefresh} colors={['#E56B8C']} />
       }
@@ -469,7 +459,10 @@ const TeacherDashboardScreen = () => {
       }}
       keyExtractor={(item, index) => `${item.type}-${index}`}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: 20 }}
+      contentContainerStyle={{ 
+        paddingHorizontal: 20,
+        paddingBottom: insets.bottom + 20 
+      }}
     />
     
     {/* Schedule Webinar Modal */}
@@ -488,18 +481,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
-    paddingTop: 20,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: isSmallScreen ? 14 : 16,
-    color: '#666',
   },
   buttonContainer: {
     flexDirection: 'column',

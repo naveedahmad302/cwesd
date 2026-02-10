@@ -28,6 +28,64 @@ export const quizzesApi = createApi({
       }),
       invalidatesTags: ['Quizzes'],
     }),
+    deleteQuiz: build.mutation<{ success?: boolean }, string>({
+      query: quizId => ({
+        url: API_ENDPOINTS.QUIZZES.DELETE(quizId),
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Quizzes'],
+    }),
+    updateQuiz: build.mutation<{ success?: boolean; data?: unknown }, { quizId: string; data: Partial<CreateQuizPayload> }>({
+      query: ({ quizId, data }) => ({
+        url: API_ENDPOINTS.QUIZZES.UPDATE(quizId),
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Quizzes'],
+    }),
+    updateQuestion: build.mutation<{ success?: boolean; data?: unknown }, { 
+      questionId: string; 
+      data: {
+        questionText: string;
+        type: 'multiple_options' | 'true_false' | 'short_answer';
+        options: Array<{ text: string; isCorrect: boolean }>;
+        points: number;
+        explanation: string;
+        order: number;
+      }
+    }>({
+      query: ({ questionId, data }) => ({
+        url: API_ENDPOINTS.QUIZZES.QUESTIONS.UPDATE(questionId),
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Quizzes', 'Quiz'],
+    }),
+    addQuestion: build.mutation<{ success?: boolean; data?: unknown }, { 
+      quizId: string; 
+      data: {
+        questionText: string;
+        type: 'multiple_options' | 'true_false' | 'short_answer';
+        options: Array<{ text: string; isCorrect: boolean }>;
+        points: number;
+        explanation: string;
+        order: number;
+      }
+    }>({
+      query: ({ quizId, data }) => ({
+        url: API_ENDPOINTS.QUIZZES.QUESTIONS.ADD(quizId),
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Quizzes', 'Quiz'],
+    }),
+    deleteQuestion: build.mutation<{ success?: boolean }, string>({
+      query: (questionId) => ({
+        url: API_ENDPOINTS.QUIZZES.QUESTIONS.DELETE(questionId),
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Quizzes', 'Quiz'],
+    }),
     startAttempt: build.mutation<unknown, { quizId: string; studentId: string }>({
       query: ({ quizId, studentId }) => ({
         url: API_ENDPOINTS.QUIZZES.ATTEMPT(quizId),
@@ -55,6 +113,11 @@ export const {
   useGetQuizByIdQuery,
   useLazyGetQuizByIdQuery,
   useCreateQuizMutation,
+  useUpdateQuizMutation,
+  useDeleteQuizMutation,
+  useUpdateQuestionMutation,
+  useAddQuestionMutation,
+  useDeleteQuestionMutation,
   useStartAttemptMutation,
   useSubmitQuizMutation,
 } = quizzesApi;
